@@ -1,3 +1,4 @@
+import random
 import networkx as nx 
 import matplotlib.pyplot as plt 
 
@@ -72,13 +73,14 @@ m = nx.adjacency_matrix(grafo)                   # Retorna a matiz esparsa para 
 print(m.todense())                               # Converte para matriz densa (padrão)  
 input()
 
+
 # Adiciona um campo peso em cada  aresta do grafo 
-grafo['vertice_1']['vertice_2']['peso'] = 5
-grafo['vertice_2']['vertice_3']['peso'] = 10
-grafo['vertice_3']['vertice_4']['peso'] = 8
-grafo['vertice_4']['vertice_5']['peso'] = 4
-grafo['vertice_5']['vertice_1']['peso'] = 6
-grafo['vertice_2']['vertice_4']['peso'] = 2
+grafo['vertice_1']['vertice_2']['peso'] = random.randint(1, 10)
+grafo['vertice_2']['vertice_3']['peso'] = random.randint(1, 10)
+grafo['vertice_3']['vertice_4']['peso'] = random.randint(1, 10)
+grafo['vertice_4']['vertice_5']['peso'] = random.randint(1, 10)
+grafo['vertice_5']['vertice_1']['peso'] = random.randint(1, 10)
+grafo['vertice_2']['vertice_4']['peso'] = random.randint(1, 10)
 
 #Lista cada aresta e seus respectivos pesos
 print('Lista cada aresta com os seus pesos')
