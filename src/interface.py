@@ -20,7 +20,7 @@ class janela(QMainWindow):
         botao_iniciar.move(500, 100)                    #Precisa centralizar o BOTÃO, cansei  .move(x,y) 
         botao_iniciar.resize(150, 50)                   #Tamanho
         botao_iniciar.styleSheet()                      #Customizar
-        botao_iniciar.clicked.connect()                 #Adicionar Função quando acionar o botão
+        #botao_iniciar.clicked.connect()                 #Adicionar Função quando acionar o botão
         self.carregar_janela()
                
 
