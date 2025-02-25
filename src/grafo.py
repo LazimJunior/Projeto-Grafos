@@ -5,93 +5,53 @@ import matplotlib.pyplot as plt
 #Criando Grafo vazio 
 grafo = nx.Graph() 
 
-#Adicionando vertices
-grafo.add_node('vertice_1') 
-grafo.add_node('vertice_2') 
-grafo.add_node('vertice_3') 
-grafo.add_node('vertice_4') 
-grafo.add_node('vertice_5')
+# Adicionar nós com atributos ao grafo(nome e altura)
+grafo.add_edges_from([('A', 'B', {"nome": "Lazim", "peso": random.randint(1, 10)}), 
+                      ('B', 'C', {"nome": "Breno", "peso": random.randint(1, 10)}),
+                      ('C', 'D', {"nome": "William", "peso": random.randint(1, 10)}),
+                      ('D', 'E', {"nome": "Cleslley", "peso": random.randint(1, 10)}),
+                      ('E', 'A', {"nome": "Lara", "peso": random.randint(1, 10)})
+])
 
-#Adicionando Arestas
-grafo.add_edge('vertice_1', 'vertice_2') 
-grafo.add_edge('vertice_2', 'vertice_3') 
-grafo.add_edge('vertice_3', 'vertice_4') 
-grafo.add_edge('vertice_4', 'vertice_5')
-grafo.add_edge('vertice_5', 'vertice_1') 
-grafo.add_edge('vertice_2', 'vertice_4') 
-
+#Adicionando Arestas extras 
+grafo.add_edges_from([('B', 'D', {"peso": random.randint(1, 10)}) 
+])
 
 #Listando Vétices
-print(f'Lista de vertices')
-print(f'{grafo.nodes()}\n')
-print('\n')
-input()
-
-#Percorer o conjunto  de vertices 
-print(f'\nPercorrendo conjunto de vertices: \n')
-for v in grafo.nodes():
-    print(v)
-print('\n')
-input()
+print('\nListando os vertices:')
+print(list(grafo.nodes))
 
 #Listando Arestas
-print(f'Lista de Arestas')
-print(f'{grafo.edges()}\n')
-print('\n')
-input()
-
-#Percorre as arestas 
-print('Percorendo as arestas:')
-for a in grafo.edges():
-    print(a)
-print('\n')
-input()
+print('\nListando as arestas:')
+print(list(grafo.edges))
 
 #Lista de Graus
-print(f'Lista de Graus')
-print(f'{grafo.degree()}\n')
-print('\n')
-input()
+print('\nListando os graus')
+print(list(grafo.degree))
 
-#Grau de um vertice especifico: vertice_2 
-print(f'O grau do Vertice_2 é:{grafo.degree()['vertice_2']}\n')
-print('\n')
-input()
+#Grau de um vertice especifico: B 
+print(f'\nO grau do B é:{grafo.degree["B"]}')
 
 #Grafo com a lista de adjacências
-print('Grafo com a lista de adjacências')
-print(grafo['vertice_1'])
-print(grafo['vertice_2'])
-print(grafo['vertice_3'])
-print(grafo['vertice_4'])
-print(grafo['vertice_5'])
-input()
+print('\nGrafo com a lista de adjacências')
+for no in grafo.adj:
+    print(list(grafo.adj[no]))
 
 #Obtem a matrizes de adjacencias do grafo
-print('Matriz de adjacencia do grafo')
+print('\nMatriz de adjacencia do grafo')
 m = nx.adjacency_matrix(grafo)                   # Retorna a matiz esparsa para economizar memoria
 print(m.todense())                               # Converte para matriz densa (padrão)  
-input()
-
-
-# Adiciona um campo peso em cada  aresta do grafo 
-grafo['vertice_1']['vertice_2']['peso'] = random.randint(1, 10)
-grafo['vertice_2']['vertice_3']['peso'] = random.randint(1, 10)
-grafo['vertice_3']['vertice_4']['peso'] = random.randint(1, 10)
-grafo['vertice_4']['vertice_5']['peso'] = random.randint(1, 10)
-grafo['vertice_5']['vertice_1']['peso'] = random.randint(1, 10)
-grafo['vertice_2']['vertice_4']['peso'] = random.randint(1, 10)
 
 #Lista cada aresta e seus respectivos pesos
-print('Lista cada aresta com os seus pesos')
+print('\nLista cada aresta com os seus pesos')
 for edge in grafo.edges():
     u = edge[0]
     v = edge[1]
-    print('O peso da aresta', edge, 'vale ' , grafo[u][v]['peso'])
-input()
+    print('O peso da aresta', edge, 'vale ' , grafo[u][v]["peso"])
+input("Precione qualquer tecla, para plotar o grafo.")
 print()
 
-print('Plotando o grafo como imagem')
+print('\nPlotando o grafo como imagem')
 
 plt.figure(2)
 #Há varios layouts, mas springs é um dos mais bonitos 
