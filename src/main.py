@@ -1,10 +1,9 @@
-# Importando bibliotecas
-import NetworkX
-import Matplotlib
-import PyQt5
-import os
+import sys
+from PyQt5.QtWidgets import QApplication
+from janela_principal import JanelaPrincipal
 
-#Importando funções 
-#  from *nome-arquivo* import *minha-função*
-
-
+if __name__ == '__main__':
+    app = QApplication(sys.argv)
+    janela = JanelaPrincipal()
+    janela.show()
+    sys.exit(app.exec_())
