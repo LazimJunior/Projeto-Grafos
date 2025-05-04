@@ -3,3 +3,4 @@
 networkx==3.4.2
 matplotlib==3.10.0
 pyqt5==5.15.11
+numpy
