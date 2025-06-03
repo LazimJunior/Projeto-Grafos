@@ -1,6 +1,6 @@
 #Biblitecas do Projeto.
 
-networkx==3.4.2
-matplotlib==3.10.0
+networkx==3.5
+matplotlib==3.10.3
 pyqt5==5.15.11
-numpy
+numpy==2.2.6
