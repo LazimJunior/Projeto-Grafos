@@ -1,342 +1,248 @@
+import random
 import sys
 import math
-import random
-import importlib
-import networkx as nx
-import gc
 from PyQt5.QtWidgets import (
-    QMainWindow, QApplication, QWidget, QVBoxLayout, QHBoxLayout,
-    QLineEdit, QPushButton, QCheckBox, QTextEdit, QLabel, QGraphicsView,
-    QGraphicsScene, QGraphicsEllipseItem, QGraphicsItem, QGraphicsTextItem
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
+    QPushButton, QTextEdit, QLineEdit, QMessageBox, QFrame, QLabel,
+    QGraphicsDropShadowEffect, QStatusBar  # NOVO
 )
-from PyQt5.QtGui import (
-    QBrush, QColor, QPen, QPolygonF, QPainter, QLinearGradient, QFont, QIcon
-)
-from PyQt5.QtCore import Qt, QPointF, QRectF, QLineF
+from PyQt5.QtGui import QIcon, QColor, QFont
+from PyQt5.QtCore import Qt
+from grafo import GraphView, build_nx_graph_from_matrix, get_all_routes, get_shortest_path, get_longest_safe_path
 
-# ---------------------------
-# Classes para exibição interativa do grafo
-# ---------------------------
+# NOVO: Importa o arquivo com os ícones que acabamos de criar
+import resources_rc
 
-class Node(QGraphicsEllipseItem):
-    def __init__(self, x, y, label, radius=20):
-        super().__init__(-radius, -radius, 2 * radius, 2 * radius)
-        self.setPos(x, y)
-        self.setBrush(QBrush(QColor("#7FB3D5")))
-        # noinspection PyTypeChecker
-        self.setFlags(
-            QGraphicsEllipseItem.ItemIsMovable |
-            QGraphicsEllipseItem.ItemIsSelectable |
-            QGraphicsEllipseItem.ItemSendsGeometryChanges
-        )
-        self.edges = []  # Lista de arestas conectadas
-        self.label = label
+# =================================================================================
+#  NOVA FOLHA DE ESTILOS (QSS) - AINDA MAIS REFINADA
+# =================================================================================
+POLISHED_STYLESHEET = """
+QWidget {
+    background-color: #2E3440;
+    color: #ECEFF4;
+    font-family: 'Segoe UI', sans-serif;
+    font-size: 14px;
+}
+/* Painel de controles com uma borda para separar visualmente */
+#ControlPanel {
+    background-color: #3B4252;
+    border-radius: 8px;
+}
+/* Títulos das seções no painel de controle */
+#TitleLabel {
+    color: #88C0D0;
+    font-size: 16px;
+    font-weight: bold;
+    padding-left: 5px;
+    padding-top: 5px;
+}
+/* Linha horizontal para separar as seções */
+#Separator {
+    background-color: #4C566A;
+}
+QLineEdit, QTextEdit {
+    background-color: #2E3440;
+    border: 1px solid #4C566A;
+    border-radius: 8px;
+    padding: 8px;
+    transition: border 0.2s ease-in-out; /* Transição suave */
+}
+QLineEdit:focus, QTextEdit:focus {
+    border: 1px solid #88C0D0;
+}
+QPushButton {
+    background-color: #5E81AC;
+    color: #ECEFF4;
+    font-weight: bold;
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
+    min-height: 25px;
+    transition: background-color 0.2s ease-in-out; /* Transição suave */
+}
+QPushButton:hover {
+    background-color: #81A1C1;
+}
+QPushButton:pressed {
+    background-color: #8FBCBB;
+}
+/* Estilo da barra de status */
+QStatusBar {
+    font-size: 13px;
+    color: #D8DEE9;
+}
+QStatusBar::item {
+    border: none; /* remove a borda entre os itens */
+}
+"""
 
-        # Criação e centralização do rótulo
-        self.text_item = QGraphicsTextItem(label, self)
-        self.text_item.setDefaultTextColor(Qt.white)
-        font = QFont("Segoe UI", 10, QFont.Bold)
-        self.text_item.setFont(font)
-        text_rect = self.text_item.boundingRect()
-        self.text_item.setPos(-text_rect.width() / 2, -text_rect.height() / 2)
-
-    def add_edge(self, edge):
-        self.edges.append(edge)
-
-    def itemChange(self, change, value):
-        if change == QGraphicsEllipseItem.ItemPositionHasChanged:
-            for edge in self.edges:
-                edge.update()
-        return super().itemChange(change, value)
-
-
-class Edge(QGraphicsItem):
-    def __init__(self, source, dest, oriented=False, weight=None):
-        super().__init__()
-        self.source = source
-        self.dest = dest
-        self.oriented = oriented
-        self.weight = weight  # Pode ser um número ou None
-        self.show_weight = False  # Se True, o peso será desenhado
-        self.source.add_edge(self)
-        self.dest.add_edge(self)
-        # noinspection PyTypeChecker
-        self.setFlags(QGraphicsItem.ItemIsSelectable)
-        self.setZValue(-1)  # Desenha as arestas atrás dos nós
-
-    def boundingRect(self):
-        extra = 5
-        p1 = self.source.scenePos()
-        p2 = self.dest.scenePos()
-        rect = QRectF(p1, p2).normalized()
-        return rect.adjusted(-extra, -extra, extra, extra)
-
-    def paint(self, painter, option, widget=None):
-        p1 = self.source.scenePos()
-        p2 = self.dest.scenePos()
-        line = QLineF(p1, p2)
-        if line.length() == 0:
-            return
-        pen = QPen(QColor("#4A4A4A"), 3)
-        pen.setCapStyle(Qt.RoundCap)
-        pen.setJoinStyle(Qt.RoundJoin)
-        painter.setPen(pen)
-        painter.drawLine(line)
-        if self.oriented:
-            self.drawArrow(painter, line)
-        if self.show_weight and self.weight is not None:
-            midpoint = QPointF((p1.x() + p2.x()) / 2, (p1.y() + p2.y()) / 2)
-            dx = p2.x() - p1.x()
-            dy = p2.y() - p1.y()
-            length = math.hypot(dx, dy)
-            offset = 12
-            perp = QPointF(-dy / length * offset, dx / length * offset) if length != 0 else QPointF(0, 0)
-            weight_point = midpoint + perp
-            font = QFont("Segoe UI", 8)
-            painter.setFont(font)
-            text = str(self.weight)
-            text_rect = painter.fontMetrics().boundingRect(text)
-            text_rect.moveCenter(weight_point.toPoint())
-            painter.setPen(QPen(QColor("#4A4A4A")))
-            painter.drawText(text_rect, Qt.AlignCenter, text)
-
-    @staticmethod
-    def drawArrow(painter, line):
-        arrow_size = 10
-        angle = math.atan2(line.dy(), line.dx())
-        p2 = line.p2()
-        dest_arrow_p1 = p2 + QPointF(
-            math.sin(angle - math.pi / 3) * arrow_size,
-            math.cos(angle - math.pi / 3) * arrow_size
-        )
-        dest_arrow_p2 = p2 + QPointF(
-            math.sin(angle - math.pi + math.pi / 3) * arrow_size,
-            math.cos(angle - math.pi + math.pi / 3) * arrow_size
-        )
-        arrow_head = QPolygonF([p2, dest_arrow_p1, dest_arrow_p2])
-        painter.setBrush(QColor("#4A4A4A"))
-        painter.drawPolygon(arrow_head)
-
-
-# ---------------------------
-# Interface Integrada
-# ---------------------------
 
 class JanelaPrincipal(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Grafo")
-        self.resize(1200, 750)
-        self.setStyleSheet("""
-            QMainWindow {
-                background: qlineargradient(x1:0, y1:0, x2:0, y2:1, stop:0 #FBF7F0, stop:1 #F8F2E9);
-                font-family: 'Segoe UI', sans-serif;
-            }
-            QLineEdit {
-                padding: 8px;
-                border: 1px solid #C4AA95;
-                border-radius: 8px;
-                background-color: #FFFFFF;
-                color: #5A4B3C;
-            }
-            QPushButton {
-                background-color: #C4AA95;
-                color: #5A4B3C;
-                padding: 8px 12px;
-                border: none;
-                border-radius: 8px;
-            }
-            QPushButton:hover {
-                background-color: #B39F89;
-            }
-            QCheckBox {
-                padding: 8px;
-                color: #5A4B3C;
-            }
-            QTextEdit {
-                background-color: #FFFFFF;
-                padding: 8px;
-                border: 1px solid #C4AA95;
-                border-radius: 8px;
-                color: #5A4B3C;
-            }
-            QLabel {
-                color: #5A4B3C;
-                font-size: 16px;
-                font-weight: bold;
-            }
-        """)
+        self.setWindowTitle("Visualizador de Grafos Pro")
+        self.setStyleSheet(POLISHED_STYLESHEET)
+        self.setMinimumSize(1200, 800)
+        self.setWindowIcon(QIcon(":/icons/random.png"))  # Define o ícone da janela
 
-    central_widget = QWidget()
-    self.setCentralWidget(central_widget)
-    main_layout = QHBoxLayout(central_widget)
+        self.central_widget = QWidget()
+        self.setCentralWidget(self.central_widget)
 
-    # Área esquerda: controles e área para exibição do grafo interativo
-    left_layout = QVBoxLayout()
-    main_layout.addLayout(left_layout, stretch=3)
+        main_layout = QHBoxLayout(self.central_widget)
+        main_layout.setContentsMargins(15, 15, 15, 15)
+        main_layout.setSpacing(15)
 
-    controls_layout = QHBoxLayout()
-    left_layout.addLayout(controls_layout)
+        self.graph_view = GraphView()
+        main_layout.addWidget(self.graph_view, stretch=3)
 
-    self.input_line = QLineEdit()
-    self.input_line.setPlaceholderText("Digite conexões:")
-    controls_layout.addWidget(self.input_line)
-    self.input_line.textChanged.connect(self.on_input_changed)
+        # --- NOVO: PAINEL DE CONTROLE REESTRUTURADO ---
+        controls_panel = QFrame()
+        controls_panel.setObjectName("ControlPanel")
+        controls_panel.setFixedWidth(380)
+        controls_layout = QVBoxLayout(controls_panel)
+        controls_layout.setContentsMargins(15, 15, 15, 15)
 
-    self.oriented_checkbox = QCheckBox("Grafo Orientado")
-    controls_layout.addWidget(self.oriented_checkbox)
+        # --- Grupo 1: Matriz ---
+        controls_layout.addWidget(self.create_title_label("Matriz de Adjacência"))
+        self.adj_matrix_edit = QTextEdit()
+        controls_layout.addWidget(self.adj_matrix_edit, stretch=2)
 
-    self.show_weight_checkbox = QCheckBox("Exibir Pesos")
-    self.show_weight_checkbox.setChecked(True)
-    controls_layout.addWidget(self.show_weight_checkbox)
+        # --- Grupo 2: Parâmetros do Caminho ---
+        controls_layout.addWidget(self.create_title_label("Parâmetros do Caminho"))
+        path_layout = QHBoxLayout()
+        self.origin_edit = QLineEdit();
+        self.origin_edit.setPlaceholderText("Origem (ex: A)")
+        self.dest_edit = QLineEdit();
+        self.dest_edit.setPlaceholderText("Destino (ex: D)")
+        path_layout.addWidget(self.origin_edit);
+        path_layout.addWidget(self.dest_edit)
+        controls_layout.addLayout(path_layout)
 
-    self.gen_button = QPushButton("Gerar Grafo")
-    self.gen_button.clicked.connect(self.load_grafo_py)  # Grafo com imput
-    controls_layout.addWidget(self.gen_button)
+        # --- Grupo 3: Ações ---
+        controls_layout.addWidget(self.create_title_label("Ações"))
+        self.calc_routes_btn = QPushButton(" Calcular Rotas");
+        self.calc_routes_btn.setIcon(QIcon(":/icons/calculate.png"))
+        self.generate_matrix_btn = QPushButton(" Gerar Matriz");
+        self.generate_matrix_btn.setIcon(QIcon(":/icons/matrix.png"))
+        self.random_graph_btn = QPushButton(" Grafo Aleatório");
+        self.random_graph_btn.setIcon(QIcon(":/icons/random.png"))
+        controls_layout.addWidget(self.calc_routes_btn);
+        controls_layout.addWidget(self.generate_matrix_btn);
+        controls_layout.addWidget(self.random_graph_btn)
 
-    self.rand_button = QPushButton("Gerar Grafo Aleatório")
-    self.rand_button.clicked.connect(self.load_random_grafo)  # Grafo Aleatorio
-    controls_layout.addWidget(self.rand_button)
+        # --- Separador ---
+        controls_layout.addWidget(self.create_separator())
 
-    self.clear_button = QPushButton("Limpar")
-    self.clear_button.clicked.connect(self.clear_all)
-    controls_layout.addWidget(self.clear_button)
+        # --- Grupo 4: Resultados ---
+        controls_layout.addWidget(self.create_title_label("Resultados"))
+        self.routes_output = QTextEdit();
+        self.routes_output.setReadOnly(True)
+        controls_layout.addWidget(self.routes_output, stretch=3)
 
-    if self.input_line.text().strip() == "":
-        self.gen_button.setEnabled(False)
+        main_layout.addWidget(controls_panel, stretch=1)
 
-    from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene
-    self.scene = QGraphicsScene()
-    grad = QLinearGradient(0, 0, 0, 600)
-    grad.setColorAt(0, QColor("#FBF7F0"))
-    grad.setColorAt(1, QColor("#F8F2E9"))
-    self.scene.setBackgroundBrush(QBrush(grad))
-    self.view = QGraphicsView(self.scene)
-    self.view.setStyleSheet("border: 2px solid #C4AA95; border-radius: 15px;")
-    self.view.setInteractive(True)
-    self.view.setRenderHints(QPainter.Antialiasing | QPainter.SmoothPixmapTransform)
-    left_layout.addWidget(self.view)
+        # NOVO: Barra de Status
+        self.setStatusBar(QStatusBar(self))
+        self.statusBar().showMessage("Pronto.")
 
-    # Área direita: painel de histórico e painel para a matriz de adjacência
-    right_layout = QVBoxLayout()
-    main_layout.addLayout(right_layout, stretch=1)
+        # Conexões
+        self.calc_routes_btn.clicked.connect(self.calc_routes)
+        self.generate_matrix_btn.clicked.connect(self.generate_matrix_from_view)
+        self.random_graph_btn.clicked.connect(self.generate_random_graph)
 
-    self.history_label = QLabel("Histórico de Grafos:")
-    right_layout.addWidget(self.history_label)
-    self.history_text = QTextEdit()
-    self.history_text.setReadOnly(True)
-    right_layout.addWidget(self.history_text)
+        self.G = None
 
-    self.matrix_label = QLabel("Matriz de Adjacência:")
-    right_layout.addWidget(self.matrix_label)
-    self.matrix_text = QTextEdit()
-    self.matrix_text.setReadOnly(True)
-    right_layout.addWidget(self.matrix_text)
+    # NOVO: Funções auxiliares para criar os títulos e separadores
+    def create_title_label(self, text):
+        title = QLabel(text)
+        title.setObjectName("TitleLabel")
+        return title
 
-    self.history = []
+    def create_separator(self):
+        line = QFrame()
+        line.setObjectName("Separator")
+        line.setFrameShape(QFrame.HLine)
+        line.setFrameShadow(QFrame.Sunken)
+        line.setFixedHeight(1)
+        return line
 
-
-def load_random_grafo(self):
-    """Carrega um grafo aleatório do módulo grafo.py"""
-    try:
-        import grafo
-        nx_grafo = grafo.get_grafo(None)
-        num_nodes = len(nx_grafo.nodes())
-        num_edges = len(nx_grafo.edges())
-        self.visualize_graph(nx_grafo)
-
-        # Histórico
-        history_entry = f"Grafo aleatório gerado ({num_nodes} nós, {num_edges} arestas)"
-        self.history.append(history_entry)
-        self.history_text.setPlainText("\n".join(self.history))
-    except Exception as e:
-        print("Erro ao carregar grafo aleatório:", e)
-        self.history_text.append(f"Erro: {str(e)}")
-
-
-def load_grafo_py(self):
-    """Carrega grafo do input usando grafo.py"""
-    try:
-        import grafo
-        input_text = self.input_line.text().strip()
-        nx_grafo = grafo.get_grafo(input_text if input_text else None)
-        num_nodes = len(nx_grafo.nodes())
-        num_edges = len(nx_grafo.edges())
-        self.visualize_graph(nx_grafo)
-
-        # Histórico
-        history_entry = f"Grafo carregado do input ({num_nodes} nós, {num_edges} arestas)"
-        self.history.append(history_entry)
-        self.history_text.setPlainText("\n".join(self.history))
-    except Exception as e:
-        print("Erro ao carregar grafo.py:", e)
-        self.history_text.append(f"Erro: {str(e)}")
-
-
-def on_input_changed(self, text):
-    if text.strip():
-        self.gen_button.setEnabled(True)
-    else:
-        self.gen_button.setEnabled(False)
-
-
-def clear_all(self):
-    # Limpeza adequada da cena
-    for item in self.scene.items():
-        self.scene.removeItem(item)
-    self.scene.clear()
-    self.history.clear()
-    self.history_text.clear()
-    self.matrix_text.clear()
-    gc.collect()  # Adicione import gc no topo
-
-
-def visualize_graph(self, nx_grafo):
-    """Visualização segura do grafo com verificações de memória"""
-    try:
-        # Limpa itens anteriores corretamente
-        for item in self.scene.items():
-            if isinstance(item, (Node, Edge)):
-                self.scene.removeItem(item)
-
-        # Limita tamanho do grafo para estabilidade
-        if len(nx_grafo.nodes()) > 50:
-            raise ValueError("Grafo muito grande para visualização (máx. 50 nós)")
-
-        pos = nx.spring_layout(nx_grafo, scale=1.0)
-        nodes_dict = {}
-
-        # Cria nós
-        for node in nx_grafo.nodes():
-            x, y = pos[node]
-            node_item = Node(x * 300 + 150, y * 300 + 150, str(node))
-            self.scene.addItem(node_item)
-            nodes_dict[node] = node_item
-
-        # Cria arestas com feedback de progresso
-        oriented = self.oriented_checkbox.isChecked()
-        edge_count = 0
-        for u, v, data in nx_grafo.edges(data=True):
-            if edge_count > 200:  # Limite de arestas
-                break
-            weight = data.get("peso", None)
-            edge_item = Edge(nodes_dict[u], nodes_dict[v], oriented, weight)
-            edge_item.show_weight = self.show_weight_checkbox.isChecked()
-            self.scene.addItem(edge_item)
-            edge_count += 1
-            QApplication.processEvents()  # Previne congelamento da UI
-
-        # Atualiza exibição da matriz
+    # Funções de lógica (com adição de mensagens na barra de status)
+    def generate_random_graph(self):
         try:
-            import grafo
-            A = grafo.get_adjacency_matrix(nx_grafo)
-            import numpy as np
-            np.set_printoptions(threshold=10, linewidth=100)
-            matrix_str = np.array2string(A.astype(int), separator='\t')
-            self.matrix_text.setPlainText(matrix_str)
+            self.graph_view.clear()
+            n_nodes = random.randint(5, 8)
+            self.graph_view.generate_random_nodes(n_nodes)
+            self.generate_matrix_from_view()
+            self.routes_output.clear()
+            self.statusBar().showMessage(f"{n_nodes} nós gerados aleatoriamente.", 4000)
         except Exception as e:
-            print("Erro na matriz:", str(e))
+            QMessageBox.critical(self, "Erro", f"Erro ao gerar grafo aleatório: {e}")
 
-    except Exception as e:
-        print("Erro de visualização:", str(e))
-        self.history_text.append(f"Erro: {str(e)}")
+    def generate_matrix_from_view(self):
+        try:
+            labels, mat = self.graph_view.generate_adjacency_matrix()
+            lines = [" ".join(str(v) for v in row) for row in mat]
+            self.adj_matrix_edit.setPlainText("\n".join(lines))
+            self.statusBar().showMessage("Matriz gerada a partir da visualização.", 4000)
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro ao gerar matriz: {e}")
+
+    def calc_routes(self):
+        text = self.adj_matrix_edit.toPlainText().strip()
+        if not text:
+            QMessageBox.warning(self, "Aviso", "A matriz de adjacência está vazia!");
+            return
+        try:
+            matrix = [list(map(int, line.split())) for line in text.splitlines()]
+        except ValueError:
+            QMessageBox.warning(self, "Erro", "Matriz inválida!");
+            return
+
+        # ... (resto da lógica de calc_routes, que continua igual)
+        # ...
+        self.statusBar().showMessage(f"Rotas de {origem} a {destino} calculadas.", 4000)
+        # ... (resto da lógica de calc_routes)
+        # (Lógica de calc_routes não precisa de alterações)
+        n = len(matrix)
+        if any(len(row) != n for row in matrix):
+            QMessageBox.warning(self, "Erro", "Matriz de adjacência deve ser quadrada!")
+            return
+
+        labels = [chr(ord('A') + i) for i in range(n)]
+        origem = self.origin_edit.text().strip().upper()
+        destino = self.dest_edit.text().strip().upper()
+
+        if not origem or not destino:
+            QMessageBox.warning(self, "Aviso", "Origem ou destino devem ser preenchidos.")
+            return
+        if origem not in labels or destino not in labels:
+            QMessageBox.warning(self, "Aviso", f"Origem ou destino inválidos. Nós disponíveis: {', '.join(labels)}")
+            return
+
+        try:
+            self.G = build_nx_graph_from_matrix(labels, matrix)
+            if hasattr(self.graph_view, 'update_from_matrix'):
+                self.graph_view.update_from_matrix(labels, matrix)
+
+            output = f"■ Análise de Rotas: {origem} → {destino} ■\n"
+            all_routes = get_all_routes(self.G, origem, destino, max_nodes=10)
+            if not all_routes:
+                output += "\nNenhuma rota encontrada entre os pontos."
+            else:
+                output += "\nRotas Encontradas:\n"
+                for r in all_routes:
+                    output += f"  • {' → '.join(r)}\n"
+
+            shortest = get_shortest_path(self.G, origem, destino)
+            if shortest:
+                output += f"\nRota Mais Curta ({len(shortest) - 1} passos):\n  • {' → '.join(shortest)}\n"
+
+            longest = get_longest_safe_path(self.G, origem, destino, all_routes)
+            if longest:
+                output += f"\nRota Mais Longa Simples ({len(longest) - 1} passos):\n  • {' → '.join(longest)}\n"
+
+            self.routes_output.setPlainText(output)
+            self.statusBar().showMessage(f"Rotas de {origem} a {destino} calculadas.", 4000)
+
+        except Exception as e:
+            QMessageBox.critical(self, "Erro", f"Erro fatal ao processar grafo: {e}")
