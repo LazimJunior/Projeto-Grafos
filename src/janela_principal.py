@@ -11,7 +11,6 @@ from PyQt5.QtWidgets import (
 from PyQt5.QtGui import QIcon, QColor, QFont
 from PyQt5.QtCore import Qt, QPointF
 from grafo import GraphView, build_nx_graph_from_matrix, get_all_routes, get_shortest_path, get_longest_safe_path
-import resources_rc
 
 # =================================================================================
 #  FOLHA DE ESTILOS (QSS)
@@ -59,9 +58,9 @@ QPushButton {
     font-weight: bold;
     border: none;
     border-radius: 8px;
-    padding: 8px; 
+    padding: 8px;
     min-height: 20px;
-    transition: background-color 0.2s ease-in-out; 
+    transition: background-color 0.2s ease-in-out;
 }
 QPushButton:hover {
     background-color: #81A1C1;
@@ -179,7 +178,6 @@ class JanelaPrincipal(QMainWindow):
         self.setWindowTitle("Projeto Grafos")
         self.setStyleSheet(POLISHED_STYLESHEET)
         self.setMinimumSize(1200, 800)
-        self.setWindowIcon(QIcon(":/icons/random.png"))
 
         self.is_directed = False
 
@@ -218,20 +216,36 @@ class JanelaPrincipal(QMainWindow):
         path_layout.addWidget(self.dest_edit)
         controls_layout.addLayout(path_layout)
 
-        controls_layout.addWidget(self.create_title_label("Ações"))
-        self.edit_weights_btn = QPushButton("Ativar Edição de Pesos")
-        self.edit_weights_btn.setCheckable(True)
-        controls_layout.addWidget(self.edit_weights_btn)
+        controls_layout.addWidget(self.create_title_label("Modos de Edição"))
 
+        modes_layout = QGridLayout()
+        modes_layout.setSpacing(10)
+        self.add_nodes_btn = QPushButton("Adicionar Nó")
+        self.add_nodes_btn.setCheckable(True)
+        self.edit_node_btn = QPushButton("Editar Rótulo")
+        self.edit_node_btn.setCheckable(True)
+        self.edit_weights_btn = QPushButton("Editar Peso")
+        self.edit_weights_btn.setCheckable(True)
+        self.delete_mode_btn = QPushButton("Excluir Item")
+        self.delete_mode_btn.setCheckable(True)
+
+        self.mode_buttons = [self.add_nodes_btn, self.edit_node_btn, self.edit_weights_btn, self.delete_mode_btn]
+
+        modes_layout.addWidget(self.add_nodes_btn, 0, 0)
+        modes_layout.addWidget(self.edit_node_btn, 0, 1)
+        modes_layout.addWidget(self.edit_weights_btn, 1, 0)
+        modes_layout.addWidget(self.delete_mode_btn, 1, 1)
+        controls_layout.addLayout(modes_layout)
+
+        controls_layout.addWidget(self.create_title_label("Ações"))
+        actions_grid = QGridLayout()
+        actions_grid.setSpacing(10)
         self.calc_routes_btn = QPushButton("Calcular Rotas")
         self.generate_matrix_btn = QPushButton("Gerar Matriz do Grafo")
         self.create_matrix_btn = QPushButton("Criar Matriz por Tabela")
         self.random_graph_btn = QPushButton("Grafo Aleatório")
-        self.delete_graph_btn = QPushButton("Limpar")
+        self.delete_graph_btn = QPushButton("Limpar Tudo")
         self.save_graph_btn = QPushButton("Salvar Grafo (TXT)")
-
-        actions_grid = QGridLayout()
-        actions_grid.setSpacing(10)
         actions_grid.addWidget(self.calc_routes_btn, 0, 0)
         actions_grid.addWidget(self.generate_matrix_btn, 0, 1)
         actions_grid.addWidget(self.create_matrix_btn, 1, 0)
@@ -252,7 +266,9 @@ class JanelaPrincipal(QMainWindow):
         self.statusBar().showMessage("Pronto.")
 
         self.graph_type_combo.currentIndexChanged.connect(self.on_graph_type_changed)
-        self.edit_weights_btn.toggled.connect(self.toggle_edit_weights_mode)
+        for button in self.mode_buttons:
+            button.clicked.connect(self.on_mode_button_toggled)
+
         self.calc_routes_btn.clicked.connect(self.calc_routes)
         self.generate_matrix_btn.clicked.connect(self.generate_matrix_from_view)
         self.create_matrix_btn.clicked.connect(self.create_matrix_from_input)
@@ -260,7 +276,31 @@ class JanelaPrincipal(QMainWindow):
         self.delete_graph_btn.clicked.connect(self.delete_graph)
         self.save_graph_btn.clicked.connect(self.save_graph_data_to_txt)
 
-        self.G = None
+    def on_mode_button_toggled(self):
+        sender = self.sender()
+        is_active = sender.isChecked()
+
+        # Desativa todos os modos no backend
+        self.graph_view.set_add_nodes_mode(False)
+        self.graph_view.set_edit_nodes_mode(False)
+        self.graph_view.set_edit_weights_mode(False)
+        self.graph_view.set_delete_mode(False)
+
+        # Desmarca todos os outros botões
+        for button in self.mode_buttons:
+            if button is not sender:
+                button.setChecked(False)
+
+        # Ativa o modo correto se o botão foi ativado
+        if is_active:
+            if sender == self.add_nodes_btn:
+                self.graph_view.set_add_nodes_mode(True)
+            elif sender == self.edit_node_btn:
+                self.graph_view.set_edit_nodes_mode(True)
+            elif sender == self.edit_weights_btn:
+                self.graph_view.set_edit_weights_mode(True)
+            elif sender == self.delete_mode_btn:
+                self.graph_view.set_delete_mode(True)
 
     def on_graph_type_changed(self, index):
         is_new_mode_directed = (index == 1)
@@ -282,18 +322,9 @@ class JanelaPrincipal(QMainWindow):
             self.graph_type_combo.setCurrentIndex(0 if not self.is_directed else 1)
             self.graph_type_combo.blockSignals(False)
 
-    def toggle_edit_weights_mode(self, checked):
-        self.graph_view.set_edit_weights_mode(checked)
-        if checked:
-            self.edit_weights_btn.setText("Desativar Edição de Pesos")
-            self.statusBar().showMessage("Modo de edição ativado: clique em um peso para alterá-lo.", 5000)
-        else:
-            self.edit_weights_btn.setText("Ativar Edição de Pesos")
-            self.statusBar().showMessage("Modo de edição desativado.", 3000)
-
     def create_title_label(self, text):
         label = QLabel(text)
-        label.setObjectName("NOME")
+        label.setObjectName("TitleLabel")
         return label
 
     def create_separator(self):
@@ -301,7 +332,7 @@ class JanelaPrincipal(QMainWindow):
         line.setFrameShape(QFrame.HLine)
         line.setFrameShadow(QFrame.Sunken)
         line.setFixedHeight(1)
-        line.setObjectName("Separador")
+        line.setObjectName("Separator")
         return line
 
     def create_matrix_from_input(self):
@@ -320,9 +351,7 @@ class JanelaPrincipal(QMainWindow):
             return
         header = f"    {' '.join(f'{label:^3}' for label in labels)}"
         separator = f"  {'-' * (len(header) - 2)}"
-
         matrix_str = [header, separator]
-
         for i, row_label in enumerate(labels):
             row_str = " ".join(f"{val:^3}" for val in mat[i])
             matrix_str.append(f"{row_label:^3}| {row_str}")
@@ -354,17 +383,14 @@ class JanelaPrincipal(QMainWindow):
         self.routes_output.clear()
         self.origin_edit.clear()
         self.dest_edit.clear()
-        self.G = None
         self.statusBar().showMessage("Cenário limpo.", 4000)
 
     def save_graph_data_to_txt(self):
         labels, matrix = self.graph_view.generate_adjacency_matrix()
         routes_content = self.routes_output.toPlainText()
-
         if not labels and not routes_content.strip():
             QMessageBox.warning(self, "Aviso", "Não há dados de grafo ou resultados para salvar.")
             return
-
         file_name, _ = QFileDialog.getSaveFileName(self, "Salvar Dados do Grafo", "dados_grafo.txt",
                                                    "Arquivos de Texto (*.txt);;Todos os Arquivos (*)")
         if file_name:
@@ -376,58 +402,80 @@ class JanelaPrincipal(QMainWindow):
                         header_line = "    " + "  ".join(f"{label:^3}" for label in labels) + "\n"
                         f.write(header_line)
                         f.write("-" * (len(header_line) + 1) + "\n")
-
                         for i, row_label in enumerate(labels):
                             row_values = " ".join(f"{val:^3}" for val in matrix[i])
                             f.write(f"{row_label:^3} | {row_values}\n")
                     else:
                         f.write("Nenhum nó para gerar a matriz.\n")
-                    f.write("\n\n")
-
-                    f.write("========== RESULTADOS DAS ROTAS ==========\n")
+                    f.write("\n\n========== RESULTADOS DAS ROTAS ==========\n")
                     f.write(routes_content if routes_content.strip() else "Nenhum resultado de rota calculado.\n")
-
                 self.statusBar().showMessage(f"Dados salvos em: {file_name}", 5000)
                 QMessageBox.information(self, "Salvar Grafo", f"Dados salvos com sucesso em:\n{file_name}")
             except Exception as e:
                 QMessageBox.critical(self, "Erro", f"Erro ao salvar os dados: {e}")
+
+    def get_path_steps_str(self, G, path):
+        """Helper para gerar a string de passos detalhados para um caminho."""
+        if len(path) < 2:
+            return ""
+        steps = []
+        for i in range(len(path) - 1):
+            u, v = path[i], path[i + 1]
+            edge_cost = G[u][v]['weight']
+            steps.append(f"{u}→{v}: {edge_cost}")
+        return f" <span style='color: #A3BE8C; font-size: 13px;'>({', '.join(steps)})</span>"
 
     def calc_routes(self):
         labels, matrix = self.graph_view.generate_adjacency_matrix()
         if not labels:
             QMessageBox.warning(self, "Aviso", "O grafo está vazio. Adicione nós e arestas primeiro.")
             return
-
         origem = self.origin_edit.text().strip().upper()
         destino = self.dest_edit.text().strip().upper()
-
         if not origem or not destino:
             QMessageBox.warning(self, "Aviso", "Origem e destino devem ser preenchidos.")
             return
         if origem not in labels or destino not in labels:
             QMessageBox.warning(self, "Aviso", f"Nós inválidos. Disponíveis: {', '.join(labels)}")
             return
-
         try:
-            self.G = build_nx_graph_from_matrix(labels, matrix, self.is_directed)
+            G = build_nx_graph_from_matrix(labels, matrix, self.is_directed)
+            style = "color: #ECEFF4; font-family: 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.6;"
+            html = f"<div style='{style}'>"
+            html += f"<h4>■ Análise de Rotas: {origem} → {destino} ■</h4>"
+            all_routes = get_all_routes(G, origem, destino, max_nodes=10)
 
-            output = f"■ Análise de Rotas: {origem} → {destino} ■\n"
-            all_routes = get_all_routes(self.G, origem, destino, max_nodes=10)
             if not all_routes:
-                output += "\nNenhuma rota encontrada."
+                html += "<p>Nenhuma rota encontrada.</p>"
             else:
-                output += "\nRotas Encontradas:\n" + "".join(f"  • {' → '.join(r)}\n" for r in all_routes)
+                html += "<p><b>Todas as Rotas Simples:</b></p><ul>"
+                routes_with_cost = []
+                for r in all_routes:
+                    cost = nx.path_weight(G, r, 'weight')
+                    routes_with_cost.append((r, cost))
 
-            if shortest_path := get_shortest_path(self.G, origem, destino):
-                custo = nx.path_weight(self.G, shortest_path, 'weight')
-                output += f"\nRota Mais Curta (custo: {custo}):\n  • {' → '.join(shortest_path)}\n"
+                routes_with_cost.sort(key=lambda x: (x[1], len(x[0])))  # Ordena por custo, depois por tamanho
 
-            if longest_path := get_longest_safe_path(self.G, origem, destino, all_routes):
-                custo = nx.path_weight(self.G, longest_path, 'weight')
-                output += f"\nRota Mais Longa (custo: {custo}):\n  • {' → '.join(longest_path)}\n"
+                for r, cost in routes_with_cost:
+                    path_str = ' → '.join(r)
+                    steps_str = self.get_path_steps_str(G, r)
+                    html += f"<li>{path_str} &nbsp; (Custo Total: <b>{cost}</b>){steps_str}</li>"
+                html += "</ul><br>"
 
-            self.routes_output.setPlainText(output)
+            if shortest_path := get_shortest_path(G, origem, destino):
+                cost = nx.path_weight(G, shortest_path, 'weight')
+                path_str = ' → '.join(shortest_path)
+                steps_str = self.get_path_steps_str(G, shortest_path)
+                html += f"<p><b>🏆 Rota Mais Curta (menor custo):</b><br> &nbsp; &nbsp; {path_str} &nbsp; (Custo: <b>{cost}</b>){steps_str}</p>"
+
+            if longest_path := get_longest_safe_path(G, origem, destino, all_routes):
+                cost = nx.path_weight(G, longest_path, 'weight')
+                path_str = ' → '.join(longest_path)
+                steps_str = self.get_path_steps_str(G, longest_path)
+                html += f"<p><b>🧗 Rota Mais Longa Simples:</b><br> &nbsp; &nbsp; {path_str} &nbsp; (Custo: <b>{cost}</b>){steps_str}</p>"
+
+            html += "</div>"
+            self.routes_output.setHtml(html)
             self.statusBar().showMessage(f"Rotas de {origem} a {destino} calculadas.", 4000)
-
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro fatal ao processar grafo: {e}")
