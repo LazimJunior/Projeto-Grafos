@@ -4,7 +4,7 @@ from PyQt5.QtCore import Qt
 class Nodo(QGraphicsEllipseItem):
     def __init__(self, x, y, nome, raio=20):
         super().__init__(-raio, -raio, 2 * raio, 2 * raio)
-        self.arestas = []  # <- MOVA esta linha para o topo
+        self.arestas = []
         self.nome = nome
 
         self.setBrush(Qt.green)

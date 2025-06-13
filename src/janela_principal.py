@@ -10,7 +10,8 @@ from PyQt5.QtWidgets import (
 )
 from PyQt5.QtGui import QIcon, QColor, QFont
 from PyQt5.QtCore import Qt, QPointF
-from grafo import GraphView, build_nx_graph_from_matrix, get_all_routes, get_shortest_path, get_longest_safe_path
+from grafo import VisualizadorGrafo, construir_grafo_nx_da_matriz, obter_todas_rotas, obter_caminho_mais_curto, \
+    obter_caminho_mais_longo_seguro
 
 # =================================================================================
 #  FOLHA DE ESTILOS (QSS)
@@ -32,9 +33,6 @@ QWidget {
     font-weight: bold;
     padding-left: 5px;
     padding-top: 5px;
-}
-#Separator {
-    background-color: #4C566A;
 }
 QLineEdit, QTextEdit, QComboBox {
     background-color: #2E3440;
@@ -86,90 +84,91 @@ QStatusBar::item {
 # =================================================================================
 #  JANELA DE DIÁLOGO PARA CRIAÇÃO DA MATRIZ
 # =================================================================================
-class MatrixInputDialog(QDialog):
-    def __init__(self, is_directed=False, parent=None):
+
+class DialogoEntradaMatriz(QDialog):
+    def __init__(self, e_direcionada=False, parent=None):
         super().__init__(parent)
-        self.is_directed = is_directed
-        title = "Criar Matriz (Orientado)" if is_directed else "Criar Matriz (Não-Orientado)"
-        self.setWindowTitle(title)
+        self.e_direcionada = e_direcionada
+        titulo = "Criar Matriz (Orientado)" if e_direcionada else "Criar Matriz (Não-Orientado)"
+        self.setWindowTitle(titulo)
         self.setMinimumWidth(350)
 
         self.layout = QVBoxLayout(self)
-        self.step1_widget = QWidget()
-        step1_layout = QFormLayout(self.step1_widget)
-        self.nodes_spinbox = QSpinBox()
-        self.nodes_spinbox.setRange(2, 26)
-        self.nodes_spinbox.setValue(4)
-        step1_layout.addRow("Número de Nós:", self.nodes_spinbox)
-        self.layout.addWidget(self.step1_widget)
+        self.widget_passo1 = QWidget()
+        layout_passo1 = QFormLayout(self.widget_passo1)
+        self.spinbox_nos = QSpinBox()
+        self.spinbox_nos.setRange(2, 26)
+        self.spinbox_nos.setValue(4)
+        layout_passo1.addRow("Número de Nós:", self.spinbox_nos)
+        self.layout.addWidget(self.widget_passo1)
 
-        self.step2_widget = QWidget()
-        self.grid_layout = QGridLayout(self.step2_widget)
-        self.layout.addWidget(self.step2_widget)
-        self.step2_widget.hide()
+        self.widget_passo2 = QWidget()
+        self.layout_grade = QGridLayout(self.widget_passo2)
+        self.layout.addWidget(self.widget_passo2)
+        self.widget_passo2.hide()
 
-        self.button_box = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        self.next_button = QPushButton("Gerar Tabela")
-        self.button_box.addButton(self.next_button, QDialogButtonBox.ActionRole)
-        self.layout.addWidget(self.button_box)
-        self.button_box.button(QDialogButtonBox.Ok).setEnabled(False)
+        self.caixa_botoes = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        self.botao_proximo = QPushButton("Gerar Tabela")
+        self.caixa_botoes.addButton(self.botao_proximo, QDialogButtonBox.ActionRole)
+        self.layout.addWidget(self.caixa_botoes)
+        self.caixa_botoes.button(QDialogButtonBox.Ok).setEnabled(False)
 
-        self.next_button.clicked.connect(self.create_matrix_grid)
-        self.button_box.accepted.connect(self.accept)
-        self.button_box.rejected.connect(self.reject)
-        self.matrix_inputs = []
-        self.labels = []
+        self.botao_proximo.clicked.connect(self.criar_grade_matriz)
+        self.caixa_botoes.accepted.connect(self.accept)
+        self.caixa_botoes.rejected.connect(self.reject)
+        self.entradas_matriz = []
+        self.rotulos = []
 
-    def create_matrix_grid(self):
-        for i in reversed(range(self.grid_layout.count())):
-            self.grid_layout.itemAt(i).widget().setParent(None)
+    def criar_grade_matriz(self):
+        for i in reversed(range(self.layout_grade.count())):
+            self.layout_grade.itemAt(i).widget().setParent(None)
 
-        num_nodes = self.nodes_spinbox.value()
-        self.labels = [chr(ord('A') + i) for i in range(num_nodes)]
-        self.matrix_inputs = [[None] * num_nodes for _ in range(num_nodes)]
+        num_nos = self.spinbox_nos.value()
+        self.rotulos = [chr(ord('A') + i) for i in range(num_nos)]
+        self.entradas_matriz = [[None] * num_nos for _ in range(num_nos)]
 
-        for j, label in enumerate(self.labels):
-            self.grid_layout.addWidget(QLabel(f"<b>{label}</b>"), 0, j + 1, Qt.AlignCenter)
+        for j, rotulo in enumerate(self.rotulos):
+            self.layout_grade.addWidget(QLabel(f"<b>{rotulo}</b>"), 0, j + 1, Qt.AlignCenter)
 
-        for i, label in enumerate(self.labels):
-            self.grid_layout.addWidget(QLabel(f"<b>{label}</b>"), i + 1, 0)
-            for j in range(num_nodes):
-                line_edit = QLineEdit("0")
-                line_edit.setFixedWidth(40)
-                line_edit.setAlignment(Qt.AlignCenter)
+        for i, rotulo in enumerate(self.rotulos):
+            self.layout_grade.addWidget(QLabel(f"<b>{rotulo}</b>"), i + 1, 0)
+            for j in range(num_nos):
+                entrada_linha = QLineEdit("0")
+                entrada_linha.setFixedWidth(40)
+                entrada_linha.setAlignment(Qt.AlignCenter)
 
                 if i == j:
-                    line_edit.setDisabled(True)
-                elif not self.is_directed:
+                    entrada_linha.setDisabled(True)
+                elif not self.e_direcionada:
                     if j < i:
-                        line_edit.setDisabled(True)
+                        entrada_linha.setDisabled(True)
                     else:
-                        line_edit.textChanged.connect(
-                            lambda text, r=i, c=j: self.update_symmetric_value(text, r, c)
+                        entrada_linha.textChanged.connect(
+                            lambda text, r=i, c=j: self.atualizar_valor_simetrico(text, r, c)
                         )
-                self.grid_layout.addWidget(line_edit, i + 1, j + 1)
-                self.matrix_inputs[i][j] = line_edit
+                self.layout_grade.addWidget(entrada_linha, i + 1, j + 1)
+                self.entradas_matriz[i][j] = entrada_linha
 
-        self.step1_widget.hide()
-        self.next_button.hide()
-        self.step2_widget.show()
-        self.button_box.button(QDialogButtonBox.Ok).setEnabled(True)
+        self.widget_passo1.hide()
+        self.botao_proximo.hide()
+        self.widget_passo2.show()
+        self.caixa_botoes.button(QDialogButtonBox.Ok).setEnabled(True)
         self.adjustSize()
 
-    def update_symmetric_value(self, text, row, col):
-        if self.matrix_inputs[col][row]:
-            self.matrix_inputs[col][row].setText(text)
+    def atualizar_valor_simetrico(self, texto, linha, coluna):
+        if self.entradas_matriz[coluna][linha]:
+            self.entradas_matriz[coluna][linha].setText(texto)
 
-    def get_matrix_data(self):
-        num_nodes = len(self.labels)
-        matrix = [[0] * num_nodes for _ in range(num_nodes)]
-        for i in range(num_nodes):
-            for j in range(num_nodes):
+    def obter_dados_matriz(self):
+        num_nos = len(self.rotulos)
+        matriz = [[0] * num_nos for _ in range(num_nos)]
+        for i in range(num_nos):
+            for j in range(num_nos):
                 try:
-                    matrix[i][j] = int(self.matrix_inputs[i][j].text())
+                    matriz[i][j] = int(self.entradas_matriz[i][j].text())
                 except (ValueError, TypeError):
-                    matrix[i][j] = 0
-        return self.labels, matrix
+                    matriz[i][j] = 0
+        return self.rotulos, matriz
 
 
 class JanelaPrincipal(QMainWindow):
@@ -179,148 +178,149 @@ class JanelaPrincipal(QMainWindow):
         self.setStyleSheet(POLISHED_STYLESHEET)
         self.setMinimumSize(1200, 800)
 
-        self.is_directed = False
+        self.e_direcionada = False
 
-        self.central_widget = QWidget()
-        self.setCentralWidget(self.central_widget)
-        main_layout = QHBoxLayout(self.central_widget)
-        main_layout.setContentsMargins(15, 15, 15, 15)
-        main_layout.setSpacing(15)
+        self.widget_central = QWidget()
+        self.setCentralWidget(self.widget_central)
+        layout_principal = QHBoxLayout(self.widget_central)
+        layout_principal.setContentsMargins(15, 15, 15, 15)
+        layout_principal.setSpacing(15)
 
-        self.graph_view = GraphView()
-        self.graph_view.graphChanged.connect(self.generate_matrix_from_view)
-        main_layout.addWidget(self.graph_view, stretch=3)
+        self.visualizador_grafo = VisualizadorGrafo()
+        self.visualizador_grafo.grafoAlterado.connect(self.gerar_matriz_da_visualizacao)
+        layout_principal.addWidget(self.visualizador_grafo, stretch=3)
 
-        controls_panel = QFrame()
-        controls_panel.setObjectName("ControlPanel")
-        controls_panel.setFixedWidth(380)
-        controls_layout = QVBoxLayout(controls_panel)
-        controls_layout.setContentsMargins(15, 15, 15, 15)
+        painel_controles = QFrame()
+        painel_controles.setObjectName("ControlPanel")
+        painel_controles.setFixedWidth(380)
+        layout_controles = QVBoxLayout(painel_controles)
+        layout_controles.setContentsMargins(15, 15, 15, 15)
 
-        controls_layout.addWidget(self.create_title_label("Matriz de Adjacência"))
-        self.adj_matrix_edit = QTextEdit()
-        controls_layout.addWidget(self.adj_matrix_edit, stretch=2)
+        layout_controles.addWidget(self.create_title_label("Matriz de Adjacência"))
+        self.entrada_matriz_adj = QTextEdit()
+        layout_controles.addWidget(self.entrada_matriz_adj, stretch=2)
 
-        controls_layout.addWidget(self.create_title_label("Tipo de Grafo"))
-        self.graph_type_combo = QComboBox()
-        self.graph_type_combo.addItems(["Não-Orientado", "Orientado"])
-        controls_layout.addWidget(self.graph_type_combo)
+        layout_controles.addWidget(self.create_title_label("Tipo de Grafo"))
+        self.combo_tipo_grafo = QComboBox()
+        self.combo_tipo_grafo.addItems(["Não-Orientado", "Orientado"])
+        layout_controles.addWidget(self.combo_tipo_grafo)
 
-        controls_layout.addWidget(self.create_title_label("Parâmetros do Caminho"))
-        path_layout = QHBoxLayout()
-        self.origin_edit = QLineEdit()
-        self.origin_edit.setPlaceholderText("Origem (ex: A)")
-        self.dest_edit = QLineEdit()
-        self.dest_edit.setPlaceholderText("Destino (ex: D)")
-        path_layout.addWidget(self.origin_edit)
-        path_layout.addWidget(self.dest_edit)
-        controls_layout.addLayout(path_layout)
+        layout_controles.addWidget(self.create_title_label("Parâmetros do Caminho"))
+        layout_caminho = QHBoxLayout()
+        self.entrada_origem = QLineEdit()
+        self.entrada_origem.setPlaceholderText("Origem (ex: A)")
+        self.entrada_destino = QLineEdit()
+        self.entrada_destino.setPlaceholderText("Destino (ex: D)")
+        layout_caminho.addWidget(self.entrada_origem)
+        layout_caminho.addWidget(self.entrada_destino)
+        layout_controles.addLayout(layout_caminho)
 
-        controls_layout.addWidget(self.create_title_label("Modos de Edição"))
+        layout_controles.addWidget(self.create_title_label("Modos de Edição"))
 
-        modes_layout = QGridLayout()
-        modes_layout.setSpacing(10)
-        self.add_nodes_btn = QPushButton("Adicionar Nó")
-        self.add_nodes_btn.setCheckable(True)
-        self.edit_node_btn = QPushButton("Editar Rótulo")
-        self.edit_node_btn.setCheckable(True)
-        self.edit_weights_btn = QPushButton("Editar Peso")
-        self.edit_weights_btn.setCheckable(True)
-        self.delete_mode_btn = QPushButton("Excluir Item")
-        self.delete_mode_btn.setCheckable(True)
+        layout_modos = QGridLayout()
+        layout_modos.setSpacing(10)
+        self.botao_adicionar_nos = QPushButton("Adicionar Nó")
+        self.botao_adicionar_nos.setCheckable(True)
+        self.botao_editar_no = QPushButton("Editar Rótulo")
+        self.botao_editar_no.setCheckable(True)
+        self.botao_editar_pesos = QPushButton("Editar Peso")
+        self.botao_editar_pesos.setCheckable(True)
+        self.botao_deletar_item = QPushButton("Excluir Item")
+        self.botao_deletar_item.setCheckable(True)
 
-        self.mode_buttons = [self.add_nodes_btn, self.edit_node_btn, self.edit_weights_btn, self.delete_mode_btn]
+        self.botoes_modo = [self.botao_adicionar_nos, self.botao_editar_no, self.botao_editar_pesos,
+                            self.botao_deletar_item]
 
-        modes_layout.addWidget(self.add_nodes_btn, 0, 0)
-        modes_layout.addWidget(self.edit_node_btn, 0, 1)
-        modes_layout.addWidget(self.edit_weights_btn, 1, 0)
-        modes_layout.addWidget(self.delete_mode_btn, 1, 1)
-        controls_layout.addLayout(modes_layout)
+        layout_modos.addWidget(self.botao_adicionar_nos, 0, 0)
+        layout_modos.addWidget(self.botao_editar_no, 0, 1)
+        layout_modos.addWidget(self.botao_editar_pesos, 1, 0)
+        layout_modos.addWidget(self.botao_deletar_item, 1, 1)
+        layout_controles.addLayout(layout_modos)
 
-        controls_layout.addWidget(self.create_title_label("Ações"))
-        actions_grid = QGridLayout()
-        actions_grid.setSpacing(10)
-        self.calc_routes_btn = QPushButton("Calcular Rotas")
-        self.generate_matrix_btn = QPushButton("Gerar Matriz do Grafo")
-        self.create_matrix_btn = QPushButton("Criar Matriz por Tabela")
-        self.random_graph_btn = QPushButton("Grafo Aleatório")
-        self.delete_graph_btn = QPushButton("Limpar Tudo")
-        self.save_graph_btn = QPushButton("Salvar Grafo (TXT)")
-        actions_grid.addWidget(self.calc_routes_btn, 0, 0)
-        actions_grid.addWidget(self.generate_matrix_btn, 0, 1)
-        actions_grid.addWidget(self.create_matrix_btn, 1, 0)
-        actions_grid.addWidget(self.random_graph_btn, 1, 1)
-        actions_grid.addWidget(self.delete_graph_btn, 2, 0)
-        actions_grid.addWidget(self.save_graph_btn, 2, 1)
-        controls_layout.addLayout(actions_grid)
+        layout_controles.addWidget(self.create_title_label("Ações"))
+        grade_acoes = QGridLayout()
+        grade_acoes.setSpacing(10)
+        self.botao_calcular_rotas = QPushButton("Calcular Rotas")
+        self.botao_gerar_matriz = QPushButton("Gerar Matriz do Grafo")
+        self.botao_criar_matriz = QPushButton("Criar Matriz por Tabela")
+        self.botao_grafo_aleatorio = QPushButton("Grafo Aleatório")
+        self.botao_deletar_grafo = QPushButton("Limpar Tudo")
+        self.botao_salvar_grafo = QPushButton("Salvar Grafo (TXT)")
+        grade_acoes.addWidget(self.botao_calcular_rotas, 0, 0)
+        grade_acoes.addWidget(self.botao_gerar_matriz, 0, 1)
+        grade_acoes.addWidget(self.botao_criar_matriz, 1, 0)
+        grade_acoes.addWidget(self.botao_grafo_aleatorio, 1, 1)
+        grade_acoes.addWidget(self.botao_deletar_grafo, 2, 0)
+        grade_acoes.addWidget(self.botao_salvar_grafo, 2, 1)
+        layout_controles.addLayout(grade_acoes)
 
-        controls_layout.addWidget(self.create_separator())
-        controls_layout.addWidget(self.create_title_label("Resultados"))
-        self.routes_output = QTextEdit()
-        self.routes_output.setReadOnly(True)
-        controls_layout.addWidget(self.routes_output, stretch=3)
+        layout_controles.addWidget(self.create_separator())
+        layout_controles.addWidget(self.create_title_label("Resultados"))
+        self.saida_rotas = QTextEdit()
+        self.saida_rotas.setReadOnly(True)
+        layout_controles.addWidget(self.saida_rotas, stretch=3)
 
-        main_layout.addWidget(controls_panel, stretch=1)
+        layout_principal.addWidget(painel_controles, stretch=1)
 
         self.setStatusBar(QStatusBar(self))
         self.statusBar().showMessage("Pronto.")
 
-        self.graph_type_combo.currentIndexChanged.connect(self.on_graph_type_changed)
-        for button in self.mode_buttons:
-            button.clicked.connect(self.on_mode_button_toggled)
+        self.combo_tipo_grafo.currentIndexChanged.connect(self.ao_tipo_grafo_alterado)
+        for botao in self.botoes_modo:
+            botao.clicked.connect(self.ao_botao_modo_alternado)
 
-        self.calc_routes_btn.clicked.connect(self.calc_routes)
-        self.generate_matrix_btn.clicked.connect(self.generate_matrix_from_view)
-        self.create_matrix_btn.clicked.connect(self.create_matrix_from_input)
-        self.random_graph_btn.clicked.connect(self.generate_random_graph)
-        self.delete_graph_btn.clicked.connect(self.delete_graph)
-        self.save_graph_btn.clicked.connect(self.save_graph_data_to_txt)
+        self.botao_calcular_rotas.clicked.connect(self.calcular_rotas)
+        self.botao_gerar_matriz.clicked.connect(self.gerar_matriz_da_visualizacao)
+        self.botao_criar_matriz.clicked.connect(self.criar_matriz_do_input)
+        self.botao_grafo_aleatorio.clicked.connect(self.gerar_grafo_aleatorio)
+        self.botao_deletar_grafo.clicked.connect(self.deletar_grafo)
+        self.botao_salvar_grafo.clicked.connect(self.salvar_dados_grafo_em_txt)
 
-    def on_mode_button_toggled(self):
-        sender = self.sender()
-        is_active = sender.isChecked()
+    def ao_botao_modo_alternado(self):
+        remetente = self.sender()
+        esta_ativo = remetente.isChecked()
 
         # Desativa todos os modos no backend
-        self.graph_view.set_add_nodes_mode(False)
-        self.graph_view.set_edit_nodes_mode(False)
-        self.graph_view.set_edit_weights_mode(False)
-        self.graph_view.set_delete_mode(False)
+        self.visualizador_grafo.definir_modo_adicionar_nos(False)
+        self.visualizador_grafo.definir_modo_editar_nos(False)
+        self.visualizador_grafo.definir_modo_editar_pesos(False)
+        self.visualizador_grafo.definir_modo_deletar(False)
 
         # Desmarca todos os outros botões
-        for button in self.mode_buttons:
-            if button is not sender:
-                button.setChecked(False)
+        for botao in self.botoes_modo:
+            if botao is not remetente:
+                botao.setChecked(False)
 
         # Ativa o modo correto se o botão foi ativado
-        if is_active:
-            if sender == self.add_nodes_btn:
-                self.graph_view.set_add_nodes_mode(True)
-            elif sender == self.edit_node_btn:
-                self.graph_view.set_edit_nodes_mode(True)
-            elif sender == self.edit_weights_btn:
-                self.graph_view.set_edit_weights_mode(True)
-            elif sender == self.delete_mode_btn:
-                self.graph_view.set_delete_mode(True)
+        if esta_ativo:
+            if remetente == self.botao_adicionar_nos:
+                self.visualizador_grafo.definir_modo_adicionar_nos(True)
+            elif remetente == self.botao_editar_no:
+                self.visualizador_grafo.definir_modo_editar_nos(True)
+            elif remetente == self.botao_editar_pesos:
+                self.visualizador_grafo.definir_modo_editar_pesos(True)
+            elif remetente == self.botao_deletar_item:
+                self.visualizador_grafo.definir_modo_deletar(True)
 
-    def on_graph_type_changed(self, index):
-        is_new_mode_directed = (index == 1)
-        if is_new_mode_directed == self.is_directed:
+    def ao_tipo_grafo_alterado(self, indice):
+        e_novo_modo_direcionado = (indice == 1)
+        if e_novo_modo_direcionado == self.e_direcionada:
             return
 
-        reply = QMessageBox.question(self, 'Mudar Tipo de Grafo',
-                                     "Mudar o tipo de grafo irá limpar o cenário atual. Deseja continuar?",
-                                     QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
+        resposta = QMessageBox.question(self, 'Mudar Tipo de Grafo',
+                                        "Mudar o tipo de grafo irá limpar o cenário atual. Deseja continuar?",
+                                        QMessageBox.Yes | QMessageBox.No, QMessageBox.No)
 
-        if reply == QMessageBox.Yes:
-            self.is_directed = is_new_mode_directed
-            self.graph_view.set_graph_type(self.is_directed)
-            self.delete_graph()
+        if resposta == QMessageBox.Yes:
+            self.e_direcionada = e_novo_modo_direcionado
+            self.visualizador_grafo.definir_tipo_grafo(self.e_direcionada)
+            self.deletar_grafo()
             self.statusBar().showMessage(
-                f"Modo alterado para Grafo {'Orientado' if self.is_directed else 'Não-Orientado'}.", 5000)
+                f"Modo alterado para Grafo {'Orientado' if self.e_direcionada else 'Não-Orientado'}.", 5000)
         else:
-            self.graph_type_combo.blockSignals(True)
-            self.graph_type_combo.setCurrentIndex(0 if not self.is_directed else 1)
-            self.graph_type_combo.blockSignals(False)
+            self.combo_tipo_grafo.blockSignals(True)
+            self.combo_tipo_grafo.setCurrentIndex(0 if not self.e_direcionada else 1)
+            self.combo_tipo_grafo.blockSignals(False)
 
     def create_title_label(self, text):
         label = QLabel(text)
@@ -335,147 +335,147 @@ class JanelaPrincipal(QMainWindow):
         line.setObjectName("Separator")
         return line
 
-    def create_matrix_from_input(self):
-        dialog = MatrixInputDialog(self.is_directed, self)
-        if dialog.exec_() == QDialog.Accepted:
-            labels, matrix = dialog.get_matrix_data()
-            self.graph_view.clear()
-            self.routes_output.clear()
-            self.graph_view.update_from_matrix(labels, matrix)
-            self.update_adj_matrix_text(labels, matrix)
+    def criar_matriz_do_input(self):
+        dialogo = DialogoEntradaMatriz(self.e_direcionada, self)
+        if dialogo.exec_() == QDialog.Accepted:
+            rotulos, matriz = dialogo.obter_dados_matriz()
+            self.visualizador_grafo.limpar()
+            self.saida_rotas.clear()
+            self.visualizador_grafo.atualizar_da_matriz(rotulos, matriz)
+            self.atualizar_texto_matriz_adj(rotulos, matriz)
             self.statusBar().showMessage("Matriz criada e grafo atualizado.", 4000)
 
-    def update_adj_matrix_text(self, labels, mat):
-        if not labels:
-            self.adj_matrix_edit.setPlainText("Nenhum nó presente para gerar a matriz.")
+    def atualizar_texto_matriz_adj(self, rotulos, mat):
+        if not rotulos:
+            self.entrada_matriz_adj.setPlainText("Nenhum nó presente para gerar a matriz.")
             return
-        header = f"    {' '.join(f'{label:^3}' for label in labels)}"
-        separator = f"  {'-' * (len(header) - 2)}"
-        matrix_str = [header, separator]
-        for i, row_label in enumerate(labels):
-            row_str = " ".join(f"{val:^3}" for val in mat[i])
-            matrix_str.append(f"{row_label:^3}| {row_str}")
-        self.adj_matrix_edit.setPlainText("\n".join(matrix_str))
+        cabeçalho = f"    {' '.join(f'{rotulo:^3}' for rotulo in rotulos)}"
+        separador = f"  {'-' * (len(cabeçalho) - 2)}"
+        string_matriz = [cabeçalho, separador]
+        for i, rotulo_linha in enumerate(rotulos):
+            valores_linha = " ".join(f"{val:^3}" for val in mat[i])
+            string_matriz.append(f"{rotulo_linha:^3}| {valores_linha}")
+        self.entrada_matriz_adj.setPlainText("\n".join(string_matriz))
 
-    def generate_random_graph(self):
+    def gerar_grafo_aleatorio(self):
         try:
-            self.graph_view.clear()
-            n_nodes = random.randint(5, 8)
-            self.graph_view.generate_random_nodes(n_nodes)
-            self.generate_matrix_from_view()
-            self.routes_output.clear()
-            self.statusBar().showMessage(f"{n_nodes} nós gerados aleatoriamente.", 4000)
+            self.visualizador_grafo.limpar()
+            n_nos = random.randint(5, 8)
+            self.visualizador_grafo.gerar_nos_aleatorios(n_nos)
+            self.gerar_matriz_da_visualizacao()
+            self.saida_rotas.clear()
+            self.statusBar().showMessage(f"{n_nos} nós gerados aleatoriamente.", 4000)
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao gerar grafo aleatório: {e}")
 
-    def generate_matrix_from_view(self):
+    def gerar_matriz_da_visualizacao(self):
         try:
-            labels, mat = self.graph_view.generate_adjacency_matrix()
-            self.update_adj_matrix_text(labels, mat)
-            if labels:
+            rotulos, mat = self.visualizador_grafo.gerar_matriz_adjacencia()
+            self.atualizar_texto_matriz_adj(rotulos, mat)
+            if rotulos:
                 self.statusBar().showMessage("Matriz gerada a partir da visualização.", 4000)
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro ao gerar matriz: {e}")
 
-    def delete_graph(self):
-        self.graph_view.clear()
-        self.adj_matrix_edit.clear()
-        self.routes_output.clear()
-        self.origin_edit.clear()
-        self.dest_edit.clear()
+    def deletar_grafo(self):
+        self.visualizador_grafo.limpar()
+        self.entrada_matriz_adj.clear()
+        self.saida_rotas.clear()
+        self.entrada_origem.clear()
+        self.entrada_destino.clear()
         self.statusBar().showMessage("Cenário limpo.", 4000)
 
-    def save_graph_data_to_txt(self):
-        labels, matrix = self.graph_view.generate_adjacency_matrix()
-        routes_content = self.routes_output.toPlainText()
-        if not labels and not routes_content.strip():
+    def salvar_dados_grafo_em_txt(self):
+        rotulos, matriz = self.visualizador_grafo.gerar_matriz_adjacencia()
+        conteudo_rotas = self.saida_rotas.toPlainText()
+        if not rotulos and not conteudo_rotas.strip():
             QMessageBox.warning(self, "Aviso", "Não há dados de grafo ou resultados para salvar.")
             return
-        file_name, _ = QFileDialog.getSaveFileName(self, "Salvar Dados do Grafo", "dados_grafo.txt",
-                                                   "Arquivos de Texto (*.txt);;Todos os Arquivos (*)")
-        if file_name:
+        nome_arquivo, _ = QFileDialog.getSaveFileName(self, "Salvar Dados do Grafo", "dados_grafo.txt",
+                                                      "Arquivos de Texto (*.txt);;Todos os Arquivos (*)")
+        if nome_arquivo:
             try:
-                with open(file_name, 'w', encoding='utf-8') as f:
-                    f.write(
-                        f"========== MATRIZ DE ADJACÊNCIA (Grafo {'Orientado' if self.is_directed else 'Não-Orientado'}) ==========\n")
-                    if labels:
-                        header_line = "    " + "  ".join(f"{label:^3}" for label in labels) + "\n"
-                        f.write(header_line)
-                        f.write("-" * (len(header_line) + 1) + "\n")
-                        for i, row_label in enumerate(labels):
-                            row_values = " ".join(f"{val:^3}" for val in matrix[i])
-                            f.write(f"{row_label:^3} | {row_values}\n")
+                with open(nome_arquivo, 'w', encoding='utf-8') as arquivo:
+                    arquivo.write(
+                        f"========== MATRIZ DE ADJACÊNCIA (Grafo {'Orientado' if self.e_direcionada else 'Não-Orientado'}) ==========\n")
+                    if rotulos:
+                        linha_cabecalho = "    " + "  ".join(f"{rotulo:^3}" for rotulo in rotulos) + "\n"
+                        arquivo.write(linha_cabecalho)
+                        arquivo.write("-" * (len(linha_cabecalho) + 1) + "\n")
+                        for i, rotulo_linha in enumerate(rotulos):
+                            valores_linha = " ".join(f"{val:^3}" for val in matriz[i])
+                            arquivo.write(f"{rotulo_linha:^3} | {valores_linha}\n")
                     else:
-                        f.write("Nenhum nó para gerar a matriz.\n")
-                    f.write("\n\n========== RESULTADOS DAS ROTAS ==========\n")
-                    f.write(routes_content if routes_content.strip() else "Nenhum resultado de rota calculado.\n")
-                self.statusBar().showMessage(f"Dados salvos em: {file_name}", 5000)
-                QMessageBox.information(self, "Salvar Grafo", f"Dados salvos com sucesso em:\n{file_name}")
+                        arquivo.write("Nenhum nó para gerar a matriz.\n")
+                    arquivo.write("\n\n========== RESULTADOS DAS ROTAS ==========\n")
+                    arquivo.write(conteudo_rotas if conteudo_rotas.strip() else "Nenhum resultado de rota calculado.\n")
+                self.statusBar().showMessage(f"Dados salvos em: {nome_arquivo}", 5000)
+                QMessageBox.information(self, "Salvar Grafo", f"Dados salvos com sucesso em:\n{nome_arquivo}")
             except Exception as e:
                 QMessageBox.critical(self, "Erro", f"Erro ao salvar os dados: {e}")
 
-    def get_path_steps_str(self, G, path):
+    def obter_passos_caminho_str(self, G, caminho):
         """Helper para gerar a string de passos detalhados para um caminho."""
-        if len(path) < 2:
+        if len(caminho) < 2:
             return ""
-        steps = []
-        for i in range(len(path) - 1):
-            u, v = path[i], path[i + 1]
-            edge_cost = G[u][v]['weight']
-            steps.append(f"{u}→{v}: {edge_cost}")
-        return f" <span style='color: #A3BE8C; font-size: 13px;'>({', '.join(steps)})</span>"
+        passos = []
+        for i in range(len(caminho) - 1):
+            u, v = caminho[i], caminho[i + 1]
+            custo_aresta = G[u][v]['weight']
+            passos.append(f"{u}→{v}: {custo_aresta}")
+        return f" <span style='color: #A3BE8C; font-size: 13px;'>({', '.join(passos)})</span>"
 
-    def calc_routes(self):
-        labels, matrix = self.graph_view.generate_adjacency_matrix()
-        if not labels:
+    def calcular_rotas(self):
+        rotulos, matriz = self.visualizador_grafo.gerar_matriz_adjacencia()
+        if not rotulos:
             QMessageBox.warning(self, "Aviso", "O grafo está vazio. Adicione nós e arestas primeiro.")
             return
-        origem = self.origin_edit.text().strip().upper()
-        destino = self.dest_edit.text().strip().upper()
+        origem = self.entrada_origem.text().strip().upper()
+        destino = self.entrada_destino.text().strip().upper()
         if not origem or not destino:
             QMessageBox.warning(self, "Aviso", "Origem e destino devem ser preenchidos.")
             return
-        if origem not in labels or destino not in labels:
-            QMessageBox.warning(self, "Aviso", f"Nós inválidos. Disponíveis: {', '.join(labels)}")
+        if origem not in rotulos or destino not in rotulos:
+            QMessageBox.warning(self, "Aviso", f"Nós inválidos. Disponíveis: {', '.join(rotulos)}")
             return
         try:
-            G = build_nx_graph_from_matrix(labels, matrix, self.is_directed)
-            style = "color: #ECEFF4; font-family: 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.6;"
-            html = f"<div style='{style}'>"
+            G = construir_grafo_nx_da_matriz(rotulos, matriz, self.e_direcionada)
+            estilo = "color: #ECEFF4; font-family: 'Segoe UI', sans-serif; font-size: 14px; line-height: 1.6;"
+            html = f"<div style='{estilo}'>"
             html += f"<h4>■ Análise de Rotas: {origem} → {destino} ■</h4>"
-            all_routes = get_all_routes(G, origem, destino, max_nodes=10)
+            todas_rotas = obter_todas_rotas(G, origem, destino, max_nos=10)
 
-            if not all_routes:
+            if not todas_rotas:
                 html += "<p>Nenhuma rota encontrada.</p>"
             else:
                 html += "<p><b>Todas as Rotas Simples:</b></p><ul>"
-                routes_with_cost = []
-                for r in all_routes:
-                    cost = nx.path_weight(G, r, 'weight')
-                    routes_with_cost.append((r, cost))
+                rotas_com_custo = []
+                for r_path in todas_rotas:
+                    custo = nx.path_weight(G, r_path, 'weight')
+                    rotas_com_custo.append((r_path, custo))
 
-                routes_with_cost.sort(key=lambda x: (x[1], len(x[0])))  # Ordena por custo, depois por tamanho
+                rotas_com_custo.sort(key=lambda x: (x[1], len(x[0])))  # Ordena por custo, depois por tamanho
 
-                for r, cost in routes_with_cost:
-                    path_str = ' → '.join(r)
-                    steps_str = self.get_path_steps_str(G, r)
-                    html += f"<li>{path_str} &nbsp; (Custo Total: <b>{cost}</b>){steps_str}</li>"
+                for r_path, custo in rotas_com_custo:
+                    string_caminho = ' → '.join(r_path)
+                    string_passos = self.obter_passos_caminho_str(G, r_path)
+                    html += f"<li>{string_caminho} &nbsp; (Custo Total: <b>{custo}</b>){string_passos}</li>"
                 html += "</ul><br>"
 
-            if shortest_path := get_shortest_path(G, origem, destino):
-                cost = nx.path_weight(G, shortest_path, 'weight')
-                path_str = ' → '.join(shortest_path)
-                steps_str = self.get_path_steps_str(G, shortest_path)
-                html += f"<p><b>🏆 Rota Mais Curta (menor custo):</b><br> &nbsp; &nbsp; {path_str} &nbsp; (Custo: <b>{cost}</b>){steps_str}</p>"
+            if caminho_mais_curto := obter_caminho_mais_curto(G, origem, destino):
+                custo = nx.path_weight(G, caminho_mais_curto, 'weight')
+                string_caminho = ' → '.join(caminho_mais_curto)
+                string_passos = self.obter_passos_caminho_str(G, caminho_mais_curto)
+                html += f"<p><b>🏆 Rota Mais Curta (menor custo):</b><br> &nbsp; &nbsp; {string_caminho} &nbsp; (Custo: <b>{custo}</b>){string_passos}</p>"
 
-            if longest_path := get_longest_safe_path(G, origem, destino, all_routes):
-                cost = nx.path_weight(G, longest_path, 'weight')
-                path_str = ' → '.join(longest_path)
-                steps_str = self.get_path_steps_str(G, longest_path)
-                html += f"<p><b>🧗 Rota Mais Longa Simples:</b><br> &nbsp; &nbsp; {path_str} &nbsp; (Custo: <b>{cost}</b>){steps_str}</p>"
+            if caminho_mais_longo := obter_caminho_mais_longo_seguro(G, origem, destino, todas_rotas):
+                custo = nx.path_weight(G, caminho_mais_longo, 'weight')
+                string_caminho = ' → '.join(caminho_mais_longo)
+                string_passos = self.obter_passos_caminho_str(G, caminho_mais_longo)
+                html += f"<p><b>🧗 Rota Mais Longa Simples:</b><br> &nbsp; &nbsp; {string_caminho} &nbsp; (Custo: <b>{custo}</b>){string_passos}</p>"
 
             html += "</div>"
-            self.routes_output.setHtml(html)
+            self.saida_rotas.setHtml(html)
             self.statusBar().showMessage(f"Rotas de {origem} a {destino} calculadas.", 4000)
         except Exception as e:
             QMessageBox.critical(self, "Erro", f"Erro fatal ao processar grafo: {e}")

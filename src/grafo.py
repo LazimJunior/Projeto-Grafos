@@ -10,434 +10,426 @@ from PyQt5.QtGui import (QPen, QColor, QFont, QPainter, QBrush, QPolygonF,
 from PyQt5.QtCore import Qt, pyqtSignal, QPointF, QRectF
 from math import cos, sin, atan2, pi, sqrt, radians
 
-
 # =================================================================================
 #  ITENS GRÁFICOS (NÓS E ARESTAS)
 # =================================================================================
 
-class NodeItem(QGraphicsEllipseItem):
+class ItemNo(QGraphicsEllipseItem):
     """Representa um nó (vértice) que pode ser arrastado na cena."""
 
-    def __init__(self, label, x, y, radius=20):
-        super().__init__(-radius, -radius, 2 * radius, 2 * radius)
-        self.edges = []
-        self.radius = radius
+    def __init__(self, rotulo, x, y, raio=20):
+        super().__init__(-raio, -raio, 2 * raio, 2 * raio)
+        self.arestas = []
+        self.raio = raio
         # Flags que permitem que o item seja móvel e selecionável
         self.setFlag(QGraphicsEllipseItem.ItemIsMovable)
         self.setFlag(QGraphicsEllipseItem.ItemIsSelectable)
         self.setFlag(QGraphicsEllipseItem.ItemSendsGeometryChanges)
 
-        self.normal_brush = QBrush(QColor("#5E81AC"))
-        self.selected_brush = QBrush(QColor("#88C0D0"))
-        self.setBrush(self.normal_brush)
+        self.pincel_normal = QBrush(QColor("#5E81AC"))
+        self.pincel_selecionado = QBrush(QColor("#88C0D0"))
+        self.setBrush(self.pincel_normal)
         self.setPen(QPen(QColor("#88C0D0"), 2))
 
-        self.shadow = QGraphicsDropShadowEffect()
-        self.shadow.setBlurRadius(15)
-        self.shadow.setColor(QColor("#88C0D0"))
-        self.shadow.setOffset(QPointF(0, 0))
+        self.sombra = QGraphicsDropShadowEffect()
+        self.sombra.setBlurRadius(15)
+        self.sombra.setColor(QColor("#88C0D0"))
+        self.sombra.setOffset(QPointF(0, 0))
 
-        self.setGraphicsEffect(self.shadow)
-        self.shadow.setEnabled(False)
-        self.text_item = QGraphicsTextItem(label, self)
+        self.setGraphicsEffect(self.sombra)
+        self.sombra.setEnabled(False)
+        self.item_texto = QGraphicsTextItem(rotulo, self)
         font = QFont("Segoe UI", 11, QFont.Bold)
-        self.text_item.setFont(font)
-        self.text_item.setDefaultTextColor(QColor("#ECEFF4"))
+        self.item_texto.setFont(font)
+        self.item_texto.setDefaultTextColor(QColor("#ECEFF4"))
         self.setPos(x, y)
-        self.label = label
-        self.set_label(label)  # Centraliza o texto inicial
+        self.rotulo = rotulo
+        self.definir_rotulo(rotulo)
 
-    def add_edge(self, edge):
-        if edge not in self.edges:
-            self.edges.append(edge)
+    def adicionar_aresta(self, aresta):
+        if aresta not in self.arestas:
+            self.arestas.append(aresta)
 
-    def set_label(self, new_label):
+    def definir_rotulo(self, novo_rotulo):
         """Atualiza o rótulo do nó e centraliza o texto."""
-        self.label = new_label
-        self.text_item.setPlainText(new_label)
-        self.text_item.setPos(-self.text_item.boundingRect().width() / 2, -self.text_item.boundingRect().height() / 2)
+        self.rotulo = novo_rotulo
+        self.item_texto.setPlainText(novo_rotulo)
+        self.item_texto.setPos(-self.item_texto.boundingRect().width() / 2, -self.item_texto.boundingRect().height() / 2)
 
     def itemChange(self, change, value):
         if change == QGraphicsEllipseItem.ItemPositionHasChanged:
-            for edge in self.edges:
-                edge.update_geometry()
+            for aresta in self.arestas:
+                aresta.atualizar_geometria()
         return super().itemChange(change, value)
 
-    def set_selected(self, is_selected):
-        self.shadow.setEnabled(is_selected)
-        self.setBrush(self.selected_brush if is_selected else self.normal_brush)
+    def definir_selecionado(self, esta_selecionado):
+        self.sombra.setEnabled(esta_selecionado)
+        self.setBrush(self.pincel_selecionado if esta_selecionado else self.pincel_normal)
 
-
-class EdgeItem(QGraphicsLineItem):
+class ItemAresta(QGraphicsLineItem):
     """Representa uma aresta, com lógica para desenhar linhas retas ou curvas."""
 
-    def __init__(self, source_node: NodeItem, dest_node: NodeItem, weight: int = 1, is_directed=False):
+    def __init__(self, no_origem: ItemNo, no_destino: ItemNo, peso: int = 1, e_direcionada=False):
         super().__init__()
-        self.source_node = source_node
-        self.dest_node = dest_node
-        self.peso = weight
-        self.is_directed = is_directed
-        self.arrow_size = 12
-        self.is_reciprocal = False
+        self.no_origem = no_origem
+        self.no_destino = no_destino
+        self.peso = peso
+        self.e_direcionada = e_direcionada
+        self.tamanho_seta = 12
+        self.e_reciproca = False
 
-        self._path = QPainterPath()
+        self._caminho = QPainterPath()
         self.setZValue(-1)
-        self.line_pen = QPen(QColor("#4C566A"), 2.5)
-        self.setPen(self.line_pen)
+        self.caneta_linha = QPen(QColor("#4C566A"), 2.5)
+        self.setPen(self.caneta_linha)
 
-        self.text_item_edge = QGraphicsTextItem(str(self.peso))
+        self.item_texto_aresta = QGraphicsTextItem(str(self.peso))
         font = QFont("Segoe UI", 10)
-        self.text_item_edge.setFont(font)
-        self.text_item_edge.setDefaultTextColor(QColor("#D8DEE9"))
+        self.item_texto_aresta.setFont(font)
+        self.item_texto_aresta.setDefaultTextColor(QColor("#D8DEE9"))
 
-        self.source_node.add_edge(self)
-        self.dest_node.add_edge(self)
-        self.update_geometry()
+        self.no_origem.adicionar_aresta(self)
+        self.no_destino.adicionar_aresta(self)
+        self.atualizar_geometria()
 
-    def add_text_to_scene(self, scene):
-        scene.addItem(self.text_item_edge)
+    def adicionar_texto_a_cena(self, cena):
+        cena.addItem(self.item_texto_aresta)
 
-    def set_weight(self, weight):
-        self.peso = weight
-        self.text_item_edge.setPlainText(str(self.peso))
+    def definir_peso(self, peso):
+        self.peso = peso
+        self.item_texto_aresta.setPlainText(str(self.peso))
 
     def boundingRect(self):
-        return self._path.boundingRect().adjusted(-20, -20, 20, 20)
+        return self._caminho.boundingRect().adjusted(-20, -20, 20, 20)
 
     def shape(self):
-        return self._path
+        return self._caminho
 
-    def update_geometry(self):
+    def atualizar_geometria(self):
         self.prepareGeometryChange()
-        p1 = self.source_node.pos()
-        p2 = self.dest_node.pos()
+        p1 = self.no_origem.pos()
+        p2 = self.no_destino.pos()
 
-        line_angle_rad = atan2(p2.y() - p1.y(), p2.x() - p1.x())
-        source_dx = cos(line_angle_rad) * self.source_node.radius
-        source_dy = sin(line_angle_rad) * self.source_node.radius
-        start_point = p1 + QPointF(source_dx, source_dy)
+        angulo_linha_rad = atan2(p2.y() - p1.y(), p2.x() - p1.x())
+        dx_origem = cos(angulo_linha_rad) * self.no_origem.raio
+        dy_origem = sin(angulo_linha_rad) * self.no_origem.raio
+        ponto_inicial = p1 + QPointF(dx_origem, dy_origem)
 
-        dest_dx = cos(line_angle_rad) * self.dest_node.radius
-        dest_dy = sin(line_angle_rad) * self.dest_node.radius
-        end_point = p2 - QPointF(dest_dx, dest_dy)
+        dx_destino = cos(angulo_linha_rad) * self.no_destino.raio
+        dy_destino = sin(angulo_linha_rad) * self.no_destino.raio
+        ponto_final = p2 - QPointF(dx_destino, dy_destino)
 
-        self._path = QPainterPath(start_point)
+        self._caminho = QPainterPath(ponto_inicial)
 
-        if self.is_reciprocal:
+        if self.e_reciproca:
             dx, dy = p2.x() - p1.x(), p2.y() - p1.y()
-            mid_point = (start_point + end_point) / 2
+            ponto_meio = (ponto_inicial + ponto_final) / 2
             perp_dx, perp_dy = -dy, dx
             norm = sqrt(perp_dx ** 2 + perp_dy ** 2)
             perp_dx, perp_dy = (perp_dx / norm, perp_dy / norm) if norm > 0 else (0, 0)
 
-            offset_distance = 30
-            if self.source_node.label > self.dest_node.label:
-                offset_distance *= -1
+            distancia_deslocamento = 30
+            if self.no_origem.rotulo > self.no_destino.rotulo:
+                distancia_deslocamento *= -1
 
-            control_point = mid_point + QPointF(perp_dx * offset_distance, perp_dy * offset_distance)
-            self._path.quadTo(control_point, end_point)
+            ponto_controle = ponto_meio + QPointF(perp_dx * distancia_deslocamento, perp_dy * distancia_deslocamento)
+            self._caminho.quadTo(ponto_controle, ponto_final)
         else:
-            self._path.lineTo(end_point)
+            self._caminho.lineTo(ponto_final)
 
-        text_pos = self._path.pointAtPercent(0.5)
-        self.text_item_edge.setPos(text_pos)
+        posicao_texto = self._caminho.pointAtPercent(0.5)
+        self.item_texto_aresta.setPos(posicao_texto)
         self.update()
 
     def paint(self, painter, option, widget=None):
         painter.setRenderHint(QPainter.Antialiasing)
-        painter.setPen(self.line_pen)
-        painter.drawPath(self._path)
+        painter.setPen(self.caneta_linha)
+        painter.drawPath(self._caminho)
 
-        if self.is_directed:
+        if self.e_direcionada:
             painter.setBrush(QBrush(QColor("#88C0D0")))
-            angle_at_end = self._path.angleAtPercent(1)
-            self.draw_arrow(painter, self._path.pointAtPercent(1), angle_at_end)
+            angulo_no_fim = self._caminho.angleAtPercent(1)
+            self.desenhar_seta(painter, self._caminho.pointAtPercent(1), angulo_no_fim)
 
-    def draw_arrow(self, painter, point, angle_deg):
-        s = self.arrow_size
-        arrow_head = QPolygonF([
+    def desenhar_seta(self, painter, ponto, angulo_graus):
+        s = self.tamanho_seta
+        cabeca_seta = QPolygonF([
             QPointF(0, 0),
             QPointF(-s, -s / 2.5),
             QPointF(-s, s / 2.5)
         ])
 
-        transform = QTransform()
-        transform.translate(point.x(), point.y())
-        transform.rotate(-angle_deg)
-        painter.drawPolygon(transform.map(arrow_head))
+        transformar = QTransform()
+        transformar.translate(ponto.x(), ponto.y())
+        transformar.rotate(-angulo_graus)
+        painter.drawPolygon(transformar.map(cabeca_seta))
 
-
-class GraphView(QGraphicsView):
-    graphChanged = pyqtSignal()
+class VisualizadorGrafo(QGraphicsView):
+    grafoAlterado = pyqtSignal()
 
     def __init__(self):
         super().__init__()
         self.setRenderHint(QPainter.Antialiasing)
-        self.scene = QGraphicsScene()
-        self.setScene(self.scene)
-        self.nodes, self.edges = {}, []
-        self.is_directed = False
+        self.cena = QGraphicsScene()
+        self.setScene(self.cena)
+        self.nos, self.arestas = {}, []
+        self.e_direcionada = False
         self.setBackgroundBrush(QBrush(QColor("#262b33")))
-        self.selected_node = None
-        self.add_nodes_mode = False
-        self.edit_nodes_mode = False
-        self.edit_weights_mode = False
-        self.delete_mode = False
+        self.no_selecionado = None
+        self.modo_adicionar_nos = False
+        self.modo_editar_nos = False
+        self.modo_editar_pesos = False
+        self.modo_deletar = False
 
-    def set_graph_type(self, is_directed: bool):
-        self.is_directed = is_directed
+    def definir_tipo_grafo(self, e_direcionada: bool):
+        self.e_direcionada = e_direcionada
 
-    def set_add_nodes_mode(self, enabled: bool):
-        self.add_nodes_mode = enabled
-        self.setCursor(Qt.PointingHandCursor if enabled else Qt.ArrowCursor)
+    def definir_modo_adicionar_nos(self, ativado: bool):
+        self.modo_adicionar_nos = ativado
+        self.setCursor(Qt.PointingHandCursor if ativado else Qt.ArrowCursor)
 
-    def set_edit_nodes_mode(self, enabled: bool):
-        self.edit_nodes_mode = enabled
-        self.setCursor(Qt.IBeamCursor if enabled else Qt.ArrowCursor)
+    def definir_modo_editar_nos(self, ativado: bool):
+        self.modo_editar_nos = ativado
+        self.setCursor(Qt.IBeamCursor if ativado else Qt.ArrowCursor)
 
-    def set_edit_weights_mode(self, enabled: bool):
-        self.edit_weights_mode = enabled
-        self.setCursor(Qt.IBeamCursor if enabled else Qt.ArrowCursor)
+    def definir_modo_editar_pesos(self, ativado: bool):
+        self.modo_editar_pesos = ativado
+        self.setCursor(Qt.IBeamCursor if ativado else Qt.ArrowCursor)
 
-    def set_delete_mode(self, enabled: bool):
-        self.delete_mode = enabled
-        self.setCursor(Qt.CrossCursor if enabled else Qt.ArrowCursor)
+    def definir_modo_deletar(self, ativado: bool):
+        self.modo_deletar = ativado
+        self.setCursor(Qt.CrossCursor if ativado else Qt.ArrowCursor)
 
-    def add_node(self, label, x, y):
-        if label in self.nodes: return
-        node = NodeItem(label, x, y)
-        self.nodes[label] = node
-        self.scene.addItem(node)
+    def adicionar_no(self, rotulo, x, y):
+        if rotulo in self.nos: return
+        no = ItemNo(rotulo, x, y)
+        self.nos[rotulo] = no
+        self.cena.addItem(no)
 
-    def add_edge(self, label1, label2, weight):
-        node1, node2 = self.nodes.get(label1), self.nodes.get(label2)
-        if not (node1 and node2) or any(e.source_node == node1 and e.dest_node == node2 for e in self.edges):
+    def adicionar_aresta(self, rotulo1, rotulo2, peso):
+        no1, no2 = self.nos.get(rotulo1), self.nos.get(rotulo2)
+        if not (no1 and no2) or any(e.no_origem == no1 and e.no_destino == no2 for e in self.arestas):
             return
-        new_edge = EdgeItem(node1, node2, weight, self.is_directed)
-        if self.is_directed:
-            opposite_edge = next((e for e in self.edges if e.source_node == node2 and e.dest_node == node1), None)
-            if opposite_edge:
-                new_edge.is_reciprocal = True
-        self.edges.append(new_edge)
-        self.scene.addItem(new_edge)
-        new_edge.add_text_to_scene(self.scene)
-        new_edge.update_geometry()
-        self.graphChanged.emit()
+        nova_aresta = ItemAresta(no1, no2, peso, self.e_direcionada)
+        if self.e_direcionada:
+            aresta_oposta = next((e for e in self.arestas if e.no_origem == no2 and e.no_destino == no1), None)
+            if aresta_oposta:
+                nova_aresta.e_reciproca = True
+        self.arestas.append(nova_aresta)
+        self.cena.addItem(nova_aresta)
+        nova_aresta.adicionar_texto_a_cena(self.cena)
+        nova_aresta.atualizar_geometria()
+        self.grafoAlterado.emit()
 
-    def delete_edge(self, edge_to_delete):
-        if edge_to_delete not in self.edges: return
-        opposite_edge = next((e for e in self.edges if
-                              e.source_node == edge_to_delete.dest_node and e.dest_node == edge_to_delete.source_node),
+    def deletar_aresta(self, aresta_para_deletar):
+        if aresta_para_deletar not in self.arestas: return
+        aresta_oposta = next((e for e in self.arestas if
+                              e.no_origem == aresta_para_deletar.no_destino and e.no_destino == aresta_para_deletar.no_origem),
                              None)
-        if edge_to_delete.scene():
-            self.scene.removeItem(edge_to_delete.text_item_edge)
-            self.scene.removeItem(edge_to_delete)
-        self.edges.remove(edge_to_delete)
-        if edge_to_delete in edge_to_delete.source_node.edges: edge_to_delete.source_node.edges.remove(edge_to_delete)
-        if edge_to_delete in edge_to_delete.dest_node.edges: edge_to_delete.dest_node.edges.remove(edge_to_delete)
-        if opposite_edge:
-            opposite_edge.is_reciprocal = False
-            opposite_edge.update_geometry()
-        self.graphChanged.emit()
+        if aresta_para_deletar.scene():
+            self.cena.removeItem(aresta_para_deletar.item_texto_aresta)
+            self.cena.removeItem(aresta_para_deletar)
+        self.arestas.remove(aresta_para_deletar)
+        if aresta_para_deletar in aresta_para_deletar.no_origem.arestas: aresta_para_deletar.no_origem.arestas.remove(aresta_para_deletar)
+        if aresta_para_deletar in aresta_para_deletar.no_destino.arestas: aresta_para_deletar.no_destino.arestas.remove(aresta_para_deletar)
+        if aresta_oposta:
+            aresta_oposta.e_reciproca = False
+            aresta_oposta.atualizar_geometria()
+        self.grafoAlterado.emit()
 
-    def clear(self):
-        self.scene.clear()
-        self.nodes, self.edges, self.selected_node = {}, [], None
+    def limpar(self):
+        self.cena.clear()
+        self.nos, self.arestas, self.no_selecionado = {}, [], None
 
-    def generate_adjacency_matrix(self):
-        labels = sorted(self.nodes.keys())
-        size = len(labels)
-        index_map = {label: i for i, label in enumerate(labels)}
-        mat = [[0] * size for _ in range(size)]
-        for edge in self.edges:
-            i, j = index_map[edge.source_node.label], index_map[edge.dest_node.label]
-            mat[i][j] = edge.peso
-            if not self.is_directed:
-                mat[j][i] = edge.peso
-        return labels, mat
+    def gerar_matriz_adjacencia(self):
+        rotulos = sorted(self.nos.keys())
+        tamanho = len(rotulos)
+        mapa_indice = {rotulo: i for i, rotulo in enumerate(rotulos)}
+        mat = [[0] * tamanho for _ in range(tamanho)]
+        for aresta in self.arestas:
+            i, j = mapa_indice[aresta.no_origem.rotulo], mapa_indice[aresta.no_destino.rotulo]
+            mat[i][j] = aresta.peso
+            if not self.e_direcionada:
+                mat[j][i] = aresta.peso
+        return rotulos, mat
 
-    def update_from_matrix(self, labels, matrix):
-        self.clear()
-        n = len(labels)
+    def atualizar_da_matriz(self, rotulos, matriz):
+        self.limpar()
+        n = len(rotulos)
         if n == 0: return
-        center_x, center_y, radius = self.width() / 2, self.height() / 2, min(self.width(), self.height()) * 0.35
-        for i, label in enumerate(labels):
-            angle = 2 * pi * i / n
-            self.add_node(label, center_x + radius * cos(angle), center_y + radius * sin(angle))
+        centro_x, centro_y, raio = self.width() / 2, self.height() / 2, min(self.width(), self.height()) * 0.35
+        for i, rotulo in enumerate(rotulos):
+            angulo = 2 * pi * i / n
+            self.adicionar_no(rotulo, centro_x + raio * cos(angulo), centro_y + raio * sin(angulo))
         for i in range(n):
             for j in range(n):
-                if matrix[i][j] > 0:
-                    if not self.is_directed and j < i: continue
-                    self.add_edge(labels[i], labels[j], int(matrix[i][j]))
+                if matriz[i][j] > 0:
+                    if not self.e_direcionada and j < i: continue
+                    self.adicionar_aresta(rotulos[i], rotulos[j], int(matriz[i][j]))
 
-    def generate_random_nodes(self, n_nodes):
-        self.clear()
-        if n_nodes <= 0: return
-        labels = [chr(ord('A') + i) for i in range(n_nodes)]
-        center_x, center_y = self.width() / 2, self.height() / 2
-        radius = min(center_x, center_y) * 0.7
-        for i, label in enumerate(labels):
-            angle = 2 * pi * i / n_nodes
-            self.add_node(label, center_x + radius * cos(angle), center_y + radius * sin(angle))
-        if n_nodes <= 1: return
-        max_edges = random.randint(n_nodes - 1, n_nodes * 2)
-        node_keys = list(self.nodes.keys())
-        existing_edges, attempts = set(), 0
-        while len(self.edges) < max_edges and attempts < max_edges * 10:
-            n1, n2 = random.sample(node_keys, 2)
-            edge_to_check = tuple(sorted((n1, n2))) if not self.is_directed else (n1, n2)
-            if edge_to_check not in existing_edges:
-                self.add_edge(n1, n2, random.randint(1, 100))
-                existing_edges.add(edge_to_check)
-            attempts += 1
+    def gerar_nos_aleatorios(self, n_nos):
+        self.limpar()
+        if n_nos <= 0: return
+        rotulos = [chr(ord('A') + i) for i in range(n_nos)]
+        centro_x, centro_y = self.width() / 2, self.height() / 2
+        raio = min(centro_x, centro_y) * 0.7
+        for i, rotulo in enumerate(rotulos):
+            angulo = 2 * pi * i / n_nos
+            self.adicionar_no(rotulo, centro_x + raio * cos(angulo), centro_y + raio * sin(angulo))
+        if n_nos <= 1: return
+        max_arestas = random.randint(n_nos - 1, n_nos * 2)
+        chaves_nos = list(self.nos.keys())
+        arestas_existentes, tentativas = set(), 0
+        while len(self.arestas) < max_arestas and tentativas < max_arestas * 10:
+            n1, n2 = random.sample(chaves_nos, 2)
+            aresta_para_verificar = tuple(sorted((n1, n2))) if not self.e_direcionada else (n1, n2)
+            if aresta_para_verificar not in arestas_existentes:
+                self.adicionar_aresta(n1, n2, random.randint(1, 100))
+                arestas_existentes.add(aresta_para_verificar)
+            tentativas += 1
 
     def mousePressEvent(self, event):
-        item_clicked = self.itemAt(event.pos())
-        node_item = None
-        if isinstance(item_clicked, NodeItem):
-            node_item = item_clicked
-        elif isinstance(item_clicked, QGraphicsTextItem) and isinstance(item_clicked.parentItem(), NodeItem):
-            node_item = item_clicked.parentItem()
+        item_clicado = self.itemAt(event.pos())
+        item_no = None
+        if isinstance(item_clicado, ItemNo):
+            item_no = item_clicado
+        elif isinstance(item_clicado, QGraphicsTextItem) and isinstance(item_clicado.parentItem(), ItemNo):
+            item_no = item_clicado.parentItem()
 
         # --- MODO: ADICIONAR NÓS ---
-        if self.add_nodes_mode:
-            if item_clicked is None:
-                label = next((chr(ord('A') + i) for i in range(26) if chr(ord('A') + i) not in self.nodes), None)
-                if label:
-                    self.add_node(label, self.mapToScene(event.pos()).x(), self.mapToScene(event.pos()).y())
-                    self.graphChanged.emit()
+        if self.modo_adicionar_nos:
+            if item_clicado is None:
+                rotulo = next((chr(ord('A') + i) for i in range(26) if chr(ord('A') + i) not in self.nos), None)
+                if rotulo:
+                    self.adicionar_no(rotulo, self.mapToScene(event.pos()).x(), self.mapToScene(event.pos()).y())
+                    self.grafoAlterado.emit()
             return
 
         # --- MODO: DELETAR ITENS ---
-        if self.delete_mode:
-            if isinstance(item_clicked, EdgeItem):
-                self.delete_edge(item_clicked)
-            elif node_item:
-                self.delete_node(node_item)
-            elif isinstance(item_clicked, QGraphicsTextItem):
-                edge_text = next((e for e in self.edges if e.text_item_edge == item_clicked), None)
-                if edge_text: self.delete_edge(edge_text)
+        if self.modo_deletar:
+            if isinstance(item_clicado, ItemAresta):
+                self.deletar_aresta(item_clicado)
+            elif item_no:
+                self.deletar_no(item_no)
+            elif isinstance(item_clicado, QGraphicsTextItem):
+                texto_aresta = next((e for e in self.arestas if e.item_texto_aresta == item_clicado), None)
+                if texto_aresta: self.deletar_aresta(texto_aresta)
             return
 
         # --- MODO: EDITAR RÓTULO DO NÓ ---
-        if self.edit_nodes_mode:
-            if node_item:
-                self.edit_node_label(node_item)
+        if self.modo_editar_nos:
+            if item_no:
+                self.editar_rotulo_no(item_no)
             return
 
         # --- MODO: EDITAR PESO DA ARESTA ---
-        if self.edit_weights_mode:
-            edge_to_edit = None
-            if isinstance(item_clicked, EdgeItem):
-                edge_to_edit = item_clicked
-            elif isinstance(item_clicked, QGraphicsTextItem):
-                edge_text = next((e for e in self.edges if e.text_item_edge == item_clicked), None)
-                if edge_text: edge_to_edit = edge_text
-            if edge_to_edit:
-                self.edit_edge_weight(edge_to_edit)
+        if self.modo_editar_pesos:
+            aresta_para_editar = None
+            if isinstance(item_clicado, ItemAresta):
+                aresta_para_editar = item_clicado
+            elif isinstance(item_clicado, QGraphicsTextItem):
+                texto_aresta = next((e for e in self.arestas if e.item_texto_aresta == item_clicado), None)
+                if texto_aresta: aresta_para_editar = texto_aresta
+            if aresta_para_editar:
+                self.editar_peso_aresta(aresta_para_editar)
                 return
 
         # --- LÓGICA DE SELEÇÃO E CRIAÇÃO DE ARESTAS (MODO PADRÃO) ---
-        if node_item:
-            if self.selected_node:
-                if self.selected_node != node_item:
-                    weight, ok = QInputDialog.getInt(self, "Peso da Aresta", "Digite o peso:", 1, 1, 999)
-                    if ok: self.add_edge(self.selected_node.label, node_item.label, weight)
-                    self.selected_node.set_selected(False)
-                    self.selected_node = None
+        if item_no:
+            if self.no_selecionado:
+                if self.no_selecionado != item_no:
+                    peso, ok = QInputDialog.getInt(self, "Peso da Aresta", "Digite o peso:", 1, 1, 999)
+                    if ok: self.adicionar_aresta(self.no_selecionado.rotulo, item_no.rotulo, peso)
+                    self.no_selecionado.definir_selecionado(False)
+                    self.no_selecionado = None
                 else:
-                    self.selected_node.set_selected(False)
-                    self.selected_node = None
+                    self.no_selecionado.definir_selecionado(False)
+                    self.no_selecionado = None
                 return
             else:
-                self.selected_node = node_item
-                self.selected_node.set_selected(True)
-        elif self.selected_node:
-            self.selected_node.set_selected(False)
-            self.selected_node = None
+                self.no_selecionado = item_no
+                self.no_selecionado.definir_selecionado(True)
+        elif self.no_selecionado:
+            self.no_selecionado.definir_selecionado(False)
+            self.no_selecionado = None
         super().mousePressEvent(event)
 
-    def edit_node_label(self, node_item):
-        current_label = node_item.label
-        new_label, ok = QInputDialog.getText(self, "Alterar Rótulo do Nó", "Novo rótulo:", text=current_label)
-        if ok and new_label and new_label != current_label:
-            if new_label in self.nodes:
-                QMessageBox.warning(self, "Rótulo Inválido", f"O rótulo '{new_label}' já está em uso.")
+    def editar_rotulo_no(self, item_no):
+        rotulo_atual = item_no.rotulo
+        novo_rotulo, ok = QInputDialog.getText(self, "Alterar Rótulo do Nó", "Novo rótulo:", text=rotulo_atual)
+        if ok and novo_rotulo and novo_rotulo != rotulo_atual:
+            if novo_rotulo in self.nos:
+                QMessageBox.warning(self, "Rótulo Inválido", f"O rótulo '{novo_rotulo}' já está em uso.")
                 return
-            self.nodes[new_label] = self.nodes.pop(current_label)
-            node_item.set_label(new_label)
-            self.graphChanged.emit()
+            self.nos[novo_rotulo] = self.nos.pop(rotulo_atual)
+            item_no.definir_rotulo(novo_rotulo)
+            self.grafoAlterado.emit()
 
-    def edit_edge_weight(self, edge):
-        new_weight, ok = QInputDialog.getInt(self, "Alterar Peso", "Novo peso:", edge.peso, 1, 999)
-        if ok and new_weight != edge.peso:
-            edge.set_weight(new_weight)
-            self.graphChanged.emit()
+    def editar_peso_aresta(self, aresta):
+        novo_peso, ok = QInputDialog.getInt(self, "Alterar Peso", "Novo peso:", aresta.peso, 1, 999)
+        if ok and novo_peso != aresta.peso:
+            aresta.definir_peso(novo_peso)
+            self.grafoAlterado.emit()
 
-    def delete_node(self, node_to_delete):
-        if node_to_delete.label not in self.nodes: return
-        edges_to_remove = list(node_to_delete.edges)
-        for edge in edges_to_remove:
-            self.delete_edge(edge)
-        del self.nodes[node_to_delete.label]
-        if node_to_delete.scene():
-            self.scene.removeItem(node_to_delete)
-        self.graphChanged.emit()
-
+    def deletar_no(self, no_para_deletar):
+        if no_para_deletar.rotulo not in self.nos: return
+        arestas_para_remover = list(no_para_deletar.arestas)
+        for aresta in arestas_para_remover:
+            self.deletar_aresta(aresta)
+        del self.nos[no_para_deletar.rotulo]
+        if no_para_deletar.scene():
+            self.cena.removeItem(no_para_deletar)
+        self.grafoAlterado.emit()
 
 # =================================================================================
 #  FUNÇÕES DE MANIPULAÇÃO E CÁLCULO DE GRAFO (NETWORKX)
 # =================================================================================
 
-def build_nx_graph_from_matrix(labels, matrix, is_directed=False):
-    G = nx.DiGraph() if is_directed else nx.Graph()
-    G.add_nodes_from(labels)
-    for i in range(len(labels)):
-        for j in range(len(labels)):
-            if matrix[i][j] > 0:
-                G.add_edge(labels[i], labels[j], weight=matrix[i][j])
+def construir_grafo_nx_da_matriz(rotulos, matriz, e_direcionado=False):
+    G = nx.DiGraph() if e_direcionado else nx.Graph()
+    G.add_nodes_from(rotulos)
+    for i in range(len(rotulos)):
+        for j in range(len(rotulos)):
+            if matriz[i][j] > 0:
+                G.add_edge(rotulos[i], rotulos[j], weight=matriz[i][j])
     return G
 
+def obter_todas_rotas(G, origem, destino, max_nos=None):
+    return list(nx.all_simple_paths(G, source=origem, target=destino, cutoff=max_nos))
 
-def get_all_routes(G, source, target, max_nodes=None):
-    return list(nx.all_simple_paths(G, source=source, target=target, cutoff=max_nodes))
-
-
-def get_shortest_path(G, source, target):
+def obter_caminho_mais_curto(G, origem, destino):
     try:
-        return nx.dijkstra_path(G, source, target, weight='weight')
+        return nx.dijkstra_path(G, origem, destino, weight='weight')
     except nx.NetworkXNoPath:
         return None
 
-
-def get_longest_safe_path(G, source, target, all_routes):
-    if not all_routes:
+def obter_caminho_mais_longo_seguro(G, origem, destino, todas_rotas):
+    if not todas_rotas:
         return None
-    return max(all_routes, key=lambda path: nx.path_weight(G, path, weight='weight'))
+    return max(todas_rotas, key=lambda caminho: nx.path_weight(G, caminho, weight='weight'))
 
-
-def calcular_e_formatar_rotas(graph_view: 'GraphView', origem: str, destino: str) -> str:
-    if not (origem in graph_view.nodes and destino in graph_view.nodes):
+def calcular_e_formatar_rotas(visualizador_grafo: 'VisualizadorGrafo', origem: str, destino: str) -> str:
+    if not (origem in visualizador_grafo.nos and destino in visualizador_grafo.nos):
         return "Nó de origem ou destino não encontrado no grafo."
-    labels, matrix = graph_view.generate_adjacency_matrix()
-    G = build_nx_graph_from_matrix(labels, matrix, graph_view.is_directed)
+    rotulos, matriz = visualizador_grafo.gerar_matriz_adjacencia()
+    G = construir_grafo_nx_da_matriz(rotulos, matriz, visualizador_grafo.e_direcionada)
     try:
-        all_paths = get_all_routes(G, origem, destino)
-        if not all_paths:
+        todas_rotas = obter_todas_rotas(G, origem, destino)
+        if not todas_rotas:
             return f"Nenhuma rota encontrada entre {origem} e {destino}."
-        paths_with_costs = [{'path': path, 'cost': nx.path_weight(G, path, weight='weight')} for path in all_paths]
-        paths_with_costs.sort(key=lambda x: x['cost'])
-        resultado_str = f"Análise de Rota de {origem} para {destino}\n" + "=" * 40 + "\n\n"
-        melhor_rota = paths_with_costs[0]
-        resultado_str += f"🏆 Melhor Rota (Custo Mínimo):\n   - Caminho: {' → '.join(melhor_rota['path'])}\n   - Custo Total: {melhor_rota['cost']}\n\n"
-        if len(paths_with_costs) > 1:
-            pior_rota = paths_with_costs[-1]
-            resultado_str += f"🚧 Pior Rota (Custo Máximo):\n   - Caminho: {' → '.join(pior_rota['path'])}\n   - Custo Total: {pior_rota['cost']}\n\n"
-        if len(paths_with_costs) > 2:
-            resultado_str += "🗺️ Outras Rotas Possíveis:\n"
-            for i, rota_info in enumerate(paths_with_costs[1:-1]):
-                resultado_str += f" {i + 1}. Caminho: {' → '.join(rota_info['path'])}\n     Custo: {rota_info['cost']}\n"
-        return resultado_str.strip()
+        rotas_com_custo = [{'caminho': caminho, 'custo': nx.path_weight(G, caminho, weight='weight')} for caminho in todas_rotas]
+        rotas_com_custo.sort(key=lambda x: x['custo'])
+        string_resultado = f"Análise de Rota de {origem} para {destino}\n" + "=" * 40 + "\n\n"
+        melhor_rota = rotas_com_custo[0]
+        string_resultado += f"🏆 Melhor Rota (Custo Mínimo):\n   - Caminho: {' → '.join(melhor_rota['caminho'])}\n   - Custo Total: {melhor_rota['custo']}\n\n"
+        if len(rotas_com_custo) > 1:
+            pior_rota = rotas_com_custo[-1]
+            string_resultado += f"🚧 Pior Rota (Custo Máximo):\n   - Caminho: {' → '.join(pior_rota['caminho'])}\n   - Custo Total: {pior_rota['custo']}\n\n"
+        if len(rotas_com_custo) > 2:
+            string_resultado += "🗺️ Outras Rotas Possíveis:\n"
+            for i, info_rota in enumerate(rotas_com_custo[1:-1]):
+                string_resultado += f" {i + 1}. Caminho: {' → '.join(info_rota['caminho'])}\n     Custo: {info_rota['custo']}\n"
+        return string_resultado.strip()
     except nx.NetworkXNoPath:
         return f"Nenhuma rota encontrada entre {origem} e {destino}."
     except nx.NodeNotFound:
